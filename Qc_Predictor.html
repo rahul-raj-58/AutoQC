@@ -1,248 +1,855 @@
-<h2 class="sr-only">QC pass/fail predictor for image URLs, with confidence percentage based on historical patterns.</h2>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AutoQC — Pass/Fail Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-.qc-wrap { padding: 1rem 0; font-family: var(--font-sans); }
-.qc-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
-.qc-input-row input { flex: 1; font-family: var(--font-mono); font-size: 13px; }
-.qc-meta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-.qc-meta-row select { width: 100%; }
-.qc-result { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1.25rem; margin-top: 16px; }
-.qc-result.empty { background: var(--color-background-secondary); border: none; text-align: center; color: var(--color-text-tertiary); font-size: 14px; padding: 2rem 1rem; }
-.qc-verdict { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.qc-badge { font-size: 13px; font-weight: 500; padding: 4px 12px; border-radius: var(--border-radius-md); }
-.qc-badge.pass { background: var(--color-background-success); color: var(--color-text-success); }
-.qc-badge.fail { background: var(--color-background-danger); color: var(--color-text-danger); }
-.qc-badge.unknown { background: var(--color-background-warning); color: var(--color-text-warning); }
-.qc-conf { font-size: 24px; font-weight: 500; }
-.qc-conf-label { font-size: 13px; color: var(--color-text-secondary); }
-.qc-bar { height: 8px; background: var(--color-background-secondary); border-radius: 4px; overflow: hidden; margin: 12px 0 16px; }
-.qc-bar-fill { height: 100%; transition: width .3s ease; }
-.qc-bar-fill.pass { background: #1D9E75; }
-.qc-bar-fill.fail { background: #E24B4A; }
-.qc-bar-fill.unknown { background: #EF9F27; }
-.qc-factors { margin-top: 14px; }
-.qc-factors h3 { font-size: 13px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 8px; }
-.qc-factor { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; border-bottom: 0.5px solid var(--color-border-tertiary); }
-.qc-factor:last-child { border-bottom: none; }
-.qc-factor-key { color: var(--color-text-secondary); }
-.qc-factor-val { font-family: var(--font-mono); font-size: 12px; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.qc-factor-rate { font-family: var(--font-mono); font-size: 12px; font-weight: 500; min-width: 56px; text-align: right; }
-.qc-factor-rate.lo { color: #0F6E56; }
-.qc-factor-rate.hi { color: #A32D2D; }
-.qc-factor-rate.mid { color: #854F0B; }
-.qc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 1.5rem; }
-.qc-stat { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px; }
-.qc-stat-label { font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px; }
-.qc-stat-val { font-size: 18px; font-weight: 500; font-family: var(--font-mono); }
-.qc-foot { font-size: 12px; color: var(--color-text-tertiary); margin-top: 14px; line-height: 1.6; }
-.qc-samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.qc-sample { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: var(--color-background-secondary); border: 0.5px solid var(--color-border-tertiary); cursor: pointer; font-family: var(--font-mono); }
-.qc-sample:hover { background: var(--color-background-tertiary); }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0a0a0b;
+  --bg-elev: #131316;
+  --bg-elev-2: #1a1a1f;
+  --bg-input: #0f0f12;
+  --border: #26262d;
+  --border-strong: #3a3a44;
+  --text: #f4f4f0;
+  --text-mute: #8a8a92;
+  --text-dim: #5a5a64;
+  --accent: #d4ff3a;
+  --accent-dim: #8fa826;
+  --pass: #4ade80;
+  --pass-bg: rgba(74, 222, 128, 0.08);
+  --fail: #ff5e5e;
+  --fail-bg: rgba(255, 94, 94, 0.08);
+  --warn: #fbbf24;
+  --warn-bg: rgba(251, 191, 36, 0.08);
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --sans: 'Inter', system-ui, sans-serif;
+  --serif: 'Instrument Serif', Georgia, serif;
+}
+
+html, body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(212, 255, 58, 0.06) 0, transparent 40%),
+    radial-gradient(circle at 90% 90%, rgba(74, 222, 128, 0.04) 0, transparent 35%);
+}
+
+.app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; position: relative; z-index: 1; }
+
+/* ============ SIDEBAR ============ */
+.sidebar { background: var(--bg-elev); border-right: 1px solid var(--border); padding: 24px 20px; display: flex; flex-direction: column; gap: 28px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 34px; height: 34px; border-radius: 6px; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-weight: 700; color: #0a0a0b; font-size: 16px;
+  box-shadow: 0 0 24px rgba(212, 255, 58, 0.35);
+}
+.brand-title { font-family: var(--serif); font-size: 24px; letter-spacing: -0.5px; }
+.brand-sub { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 2px; }
+
+.side-section { display: flex; flex-direction: column; gap: 8px; }
+.side-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+
+.nav-btn {
+  background: transparent; border: none; color: var(--text-mute); text-align: left;
+  padding: 10px 12px; border-radius: 6px; cursor: pointer; font-family: var(--sans); font-size: 13px;
+  display: flex; align-items: center; gap: 10px; transition: all 0.15s;
+  font-weight: 500;
+}
+.nav-btn:hover { background: var(--bg-elev-2); color: var(--text); }
+.nav-btn.active { background: var(--bg-elev-2); color: var(--accent); }
+.nav-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.6; }
+
+.stat-row { display: flex; justify-content: space-between; padding: 6px 0; font-family: var(--mono); font-size: 11px; }
+.stat-row .k { color: var(--text-dim); }
+.stat-row .v { color: var(--text); }
+
+.side-foot { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+
+/* ============ MAIN ============ */
+.main { padding: 32px 40px 60px; max-width: 1200px; width: 100%; }
+
+.page-head { margin-bottom: 28px; }
+.crumbs { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+.page-title { font-family: var(--serif); font-size: 44px; letter-spacing: -1px; line-height: 1; }
+.page-sub { color: var(--text-mute); margin-top: 10px; max-width: 640px; font-size: 14px; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ============ INPUT BLOCK ============ */
+.input-card {
+  background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px; margin-bottom: 24px;
+  position: relative; overflow: hidden;
+}
+.input-card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: linear-gradient(180deg, var(--accent), transparent);
+}
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.2px; }
+
+.url-row { display: flex; gap: 10px; align-items: stretch; }
+.url-input {
+  flex: 1; background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--text); padding: 12px 14px; border-radius: 8px;
+  font-family: var(--mono); font-size: 13px; transition: border 0.15s;
+}
+.url-input:focus { outline: none; border-color: var(--accent); }
+.url-input::placeholder { color: var(--text-dim); }
+
+.predict-btn {
+  background: var(--accent); color: #0a0a0b; border: none;
+  padding: 0 24px; border-radius: 8px; cursor: pointer;
+  font-family: var(--mono); font-weight: 700; font-size: 12px;
+  text-transform: uppercase; letter-spacing: 1.5px;
+  transition: all 0.15s; display: flex; align-items: center; gap: 8px;
+}
+.predict-btn:hover { background: #e6ff5e; box-shadow: 0 0 24px rgba(212, 255, 58, 0.4); }
+.predict-btn:active { transform: scale(0.98); }
+.predict-btn svg { width: 14px; height: 14px; }
+
+.meta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.select, .textarea {
+  background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--text); padding: 10px 12px; border-radius: 8px;
+  font-family: var(--mono); font-size: 12px; width: 100%;
+}
+.select:focus, .textarea:focus { outline: none; border-color: var(--accent); }
+.textarea { font-family: var(--mono); font-size: 12px; resize: vertical; min-height: 100px; line-height: 1.6; }
+
+.samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; align-items: center; }
+.samples-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-right: 4px; }
+.chip {
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--text-mute);
+  padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; transition: all 0.15s;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ============ RESULT CARD ============ */
+.result-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; margin-top: 24px; }
+@media (max-width: 900px) { .result-grid { grid-template-columns: 1fr; } }
+
+.result-main, .result-side {
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px;
+  padding: 24px;
+}
+
+.verdict {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+}
+.verdict-left { display: flex; align-items: center; gap: 14px; }
+.verdict-icon { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; font-family: var(--mono); }
+.verdict-icon.pass { background: var(--pass-bg); color: var(--pass); border: 1px solid rgba(74,222,128,0.25); }
+.verdict-icon.fail { background: var(--fail-bg); color: var(--fail); border: 1px solid rgba(255,94,94,0.25); }
+.verdict-icon.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid rgba(251,191,36,0.25); }
+.verdict-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); }
+.verdict-text { font-family: var(--serif); font-size: 28px; line-height: 1; margin-top: 2px; }
+
+.verdict-right { text-align: right; }
+.conf-num { font-family: var(--mono); font-size: 36px; font-weight: 500; letter-spacing: -1px; line-height: 1; }
+.conf-num.pass { color: var(--pass); }
+.conf-num.fail { color: var(--fail); }
+.conf-num.warn { color: var(--warn); }
+.conf-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-top: 4px; }
+
+.bar-track { height: 6px; background: var(--bg-input); border-radius: 3px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.bar-fill.pass { background: linear-gradient(90deg, var(--pass), #6ef0a0); }
+.bar-fill.fail { background: linear-gradient(90deg, var(--fail), #ff8a8a); }
+.bar-fill.warn { background: linear-gradient(90deg, var(--warn), #fcd169); }
+.threshold-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); opacity: 0.6; }
+
+.threshold-block { margin-top: 18px; }
+.threshold-row { display: flex; align-items: center; gap: 12px; }
+.threshold-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.threshold-val { font-family: var(--mono); font-size: 12px; color: var(--text); min-width: 50px; text-align: right; }
+
+.factors-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 28px; margin-bottom: 14px; }
+.factors-title { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; }
+.factors-hint { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+.factor-row {
+  display: grid; grid-template-columns: 130px 1fr 90px 70px;
+  gap: 12px; padding: 12px 0; border-top: 1px solid var(--border);
+  align-items: center;
+}
+.factor-row:first-child { border-top: none; padding-top: 4px; }
+.factor-key { font-family: var(--mono); font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 1px; }
+.factor-val { font-family: var(--mono); font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.factor-mini-bar { height: 4px; background: var(--bg-input); border-radius: 2px; position: relative; overflow: hidden; }
+.factor-mini-fill { height: 100%; position: absolute; left: 0; top: 0; transition: width 0.4s; }
+.factor-mini-fill.lo { background: var(--pass); }
+.factor-mini-fill.mid { background: var(--warn); }
+.factor-mini-fill.hi { background: var(--fail); }
+.factor-rate { font-family: var(--mono); font-size: 12px; text-align: right; font-weight: 500; }
+.factor-rate.lo { color: var(--pass); }
+.factor-rate.mid { color: var(--warn); }
+.factor-rate.hi { color: var(--fail); }
+
+/* ============ SIDE: image preview ============ */
+.preview-title { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 12px; }
+.preview-box { width: 100%; aspect-ratio: 4/3; background: var(--bg-input); border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; border: 1px solid var(--border); }
+.preview-box img { width: 100%; height: 100%; object-fit: contain; }
+.preview-placeholder { color: var(--text-dim); font-family: var(--mono); font-size: 11px; text-align: center; padding: 20px; }
+.preview-info { margin-top: 12px; }
+.preview-info-row { display: flex; justify-content: space-between; padding: 6px 0; font-family: var(--mono); font-size: 11px; border-bottom: 1px solid var(--border); }
+.preview-info-row:last-child { border-bottom: none; }
+.preview-info-row .k { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+.preview-info-row .v { color: var(--text); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.empty-result { text-align: center; padding: 60px 20px; color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+.empty-result-icon { font-size: 48px; opacity: 0.3; margin-bottom: 16px; font-family: var(--mono); }
+
+/* ============ BATCH ============ */
+.batch-actions { display: flex; gap: 10px; margin-top: 14px; }
+.btn-ghost {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  padding: 10px 16px; border-radius: 8px; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+  transition: all 0.15s;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.batch-results { margin-top: 24px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+.batch-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.summary-card { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+.summary-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; }
+.summary-val { font-family: var(--mono); font-size: 22px; font-weight: 500; }
+.summary-val.pass { color: var(--pass); }
+.summary-val.fail { color: var(--fail); }
+.summary-val.warn { color: var(--warn); }
+
+.filter-bar { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.filter-bar .field-label { margin-right: 8px; }
+.filter-chip {
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--text-mute);
+  padding: 5px 12px; border-radius: 4px; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
+}
+.filter-chip.active { background: var(--accent); color: #0a0a0b; border-color: var(--accent); }
+
+table.batch-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+table.batch-table th { text-align: left; padding: 8px 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; font-weight: 500; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; }
+table.batch-table th:hover { color: var(--accent); }
+table.batch-table td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+table.batch-table tr:hover td { background: var(--bg-input); }
+.row-verdict { font-weight: 500; }
+.row-verdict.pass { color: var(--pass); }
+.row-verdict.fail { color: var(--fail); }
+.row-verdict.warn { color: var(--warn); }
+.url-cell { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-mute); }
+
+/* ============ HISTORY ============ */
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-item { display: grid; grid-template-columns: 80px 1fr 90px 90px; gap: 12px; padding: 12px 14px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; align-items: center; cursor: pointer; transition: border 0.15s; }
+.history-item:hover { border-color: var(--accent-dim); }
+.history-when { font-family: var(--mono); font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+.history-url { font-family: var(--mono); font-size: 11px; color: var(--text-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-pct { font-family: var(--mono); font-size: 14px; font-weight: 500; text-align: right; }
+.history-verdict { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; text-align: right; }
+
+/* ============ ABOUT ============ */
+.about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.about-card { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+.about-card h3 { font-family: var(--serif); font-size: 22px; margin-bottom: 12px; letter-spacing: -0.5px; font-weight: 400; }
+.about-card p { color: var(--text-mute); font-size: 13px; margin-bottom: 10px; line-height: 1.7; }
+.about-card code { font-family: var(--mono); font-size: 12px; background: var(--bg-input); padding: 2px 6px; border-radius: 4px; color: var(--accent); }
+.about-card .big-num { font-family: var(--mono); font-size: 32px; font-weight: 500; color: var(--accent); letter-spacing: -1px; }
+.about-card .big-num-sub { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; }
+
+.metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 16px; }
+.metric-card { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { position: relative; height: auto; flex-direction: row; flex-wrap: wrap; padding: 16px; gap: 16px; }
+  .side-section:not(:first-child) { display: none; }
+  .main { padding: 20px 16px 40px; }
+  .page-title { font-size: 30px; }
+  .meta-row, .batch-summary, .about-grid { grid-template-columns: 1fr; }
+  .url-row { flex-direction: column; }
+  .factor-row { grid-template-columns: 100px 1fr 70px 60px; }
+  .url-cell { max-width: 200px; }
+}
+
+/* Animations */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.tab-panel.active > * { animation: fadeUp 0.35s ease-out backwards; }
+.tab-panel.active > *:nth-child(1) { animation-delay: 0.02s; }
+.tab-panel.active > *:nth-child(2) { animation-delay: 0.08s; }
+.tab-panel.active > *:nth-child(3) { animation-delay: 0.14s; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 </style>
+</head>
+<body>
 
-<div class="qc-wrap">
-  <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom: 14px;">
-    <div style="font-size: 18px; font-weight: 500;">QC pass/fail predictor</div>
-    <div style="font-size: 12px; color: var(--color-text-secondary);" id="qc-model-meta"></div>
-  </div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">A</div>
+      <div>
+        <div class="brand-title">AutoQC</div>
+        <div class="brand-sub">Pass / Fail Predictor</div>
+      </div>
+    </div>
 
-  <div class="qc-input-row">
-    <input type="text" id="qc-url" placeholder="Paste an output_image_hres_url..." />
-    <button onclick="qcPredict()"><i class="ti ti-zap" aria-hidden="true"></i> Predict</button>
-  </div>
+    <div class="side-section">
+      <div class="side-label">View</div>
+      <button class="nav-btn active" data-tab="single"><span class="dot"></span>Single URL</button>
+      <button class="nav-btn" data-tab="batch"><span class="dot"></span>Batch</button>
+      <button class="nav-btn" data-tab="history"><span class="dot"></span>History</button>
+      <button class="nav-btn" data-tab="about"><span class="dot"></span>About model</button>
+    </div>
 
-  <div class="qc-meta-row">
-    <select id="qc-category">
-      <option value="">— image category (optional) —</option>
-    </select>
-    <select id="qc-enterprise">
-      <option value="">— enterprise (optional) —</option>
-    </select>
-  </div>
+    <div class="side-section">
+      <div class="side-label">Model stats</div>
+      <div class="stat-row"><span class="k">Records</span><span class="v" id="side-records">—</span></div>
+      <div class="stat-row"><span class="k">Pass</span><span class="v" id="side-pass">—</span></div>
+      <div class="stat-row"><span class="k">Fail</span><span class="v" id="side-fail">—</span></div>
+      <div class="stat-row"><span class="k">Base rate</span><span class="v" id="side-base">—</span></div>
+      <div class="stat-row"><span class="k">AUC (held-out)</span><span class="v">0.994</span></div>
+    </div>
 
-  <div style="font-size: 12px; color: var(--color-text-secondary); margin-bottom: 4px;">Try a sample:</div>
-  <div class="qc-samples" id="qc-samples"></div>
+    <div class="side-foot">
+      v1.0 · Stats-based predictor<br>
+      Pattern lookup over URL features + optional metadata.
+    </div>
+  </aside>
 
-  <div id="qc-result" class="qc-result empty">Paste a URL above and hit Predict.</div>
+  <main class="main">
 
-  <div class="qc-foot" id="qc-foot"></div>
+    <!-- ============ SINGLE ============ -->
+    <section class="tab-panel active" data-panel="single">
+      <div class="page-head">
+        <div class="crumbs">Predict / Single URL</div>
+        <h1 class="page-title">Will this image pass QC?</h1>
+        <p class="page-sub">Paste a hi-res output URL. The model checks it against ~1M historical pass/fail records and returns a confidence score with the reasoning behind it.</p>
+      </div>
+
+      <div class="input-card">
+        <div class="field">
+          <label class="field-label">Image URL</label>
+          <div class="url-row">
+            <input type="text" class="url-input" id="qc-url" placeholder="https://spyne-media.s3.amazonaws.com/..." spellcheck="false" autocomplete="off" />
+            <button class="predict-btn" id="qc-predict-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+              Predict
+            </button>
+          </div>
+        </div>
+
+        <div class="meta-row">
+          <div class="field">
+            <label class="field-label">Image category (optional)</label>
+            <select class="select" id="qc-category">
+              <option value="">— auto / none —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">Enterprise (optional)</label>
+            <select class="select" id="qc-enterprise">
+              <option value="">— auto / none —</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="samples">
+          <span class="samples-label">try:</span>
+          <span class="chip" data-sample="pass">a typical pass</span>
+          <span class="chip" data-sample="fail">a likely fail</span>
+          <span class="chip" data-sample="unknown">unknown domain</span>
+          <span class="chip" data-sample="clear">clear</span>
+        </div>
+      </div>
+
+      <div id="qc-result-wrap"></div>
+    </section>
+
+    <!-- ============ BATCH ============ -->
+    <section class="tab-panel" data-panel="batch">
+      <div class="page-head">
+        <div class="crumbs">Predict / Batch</div>
+        <h1 class="page-title">Score many URLs at once</h1>
+        <p class="page-sub">Paste one URL per line. The model scores each, lets you filter by verdict, sort by any column, and export results as CSV.</p>
+      </div>
+
+      <div class="input-card">
+        <div class="field">
+          <label class="field-label">URLs (one per line)</label>
+          <textarea class="textarea" id="batch-input" placeholder="https://spyne-media.s3.amazonaws.com/...&#10;https://spyne-desktop-app.s3.amazonaws.com/...&#10;https://..."></textarea>
+        </div>
+        <div class="batch-actions">
+          <button class="predict-btn" id="batch-run">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+            Run batch
+          </button>
+          <button class="btn-ghost" id="batch-paste-sample">Paste samples</button>
+          <button class="btn-ghost" id="batch-clear">Clear</button>
+        </div>
+      </div>
+
+      <div id="batch-output"></div>
+    </section>
+
+    <!-- ============ HISTORY ============ -->
+    <section class="tab-panel" data-panel="history">
+      <div class="page-head">
+        <div class="crumbs">Predict / History</div>
+        <h1 class="page-title">Recent predictions</h1>
+        <p class="page-sub">Stored in your browser only — clears when you clear your local storage. Click any row to re-run that URL.</p>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <button class="btn-ghost" id="history-clear">Clear history</button>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </section>
+
+    <!-- ============ ABOUT ============ -->
+    <section class="tab-panel" data-panel="about">
+      <div class="page-head">
+        <div class="crumbs">About</div>
+        <h1 class="page-title">How the model works</h1>
+        <p class="page-sub">A stats-based predictor — not a deep learning model. It cannot see pixels. What it CAN do is extract signal from where a URL came from in your pipeline.</p>
+      </div>
+
+      <div class="about-grid">
+        <div class="about-card">
+          <h3>The training data</h3>
+          <p>Built from <span id="about-records">—</span> historical QC records. A record is labeled <code>Fail</code> when <code>rejected_comment</code> is non-null, and <code>Pass</code> otherwise.</p>
+          <div class="metric-grid">
+            <div class="metric-card"><div class="summary-label">Pass</div><div class="big-num pass" style="color: var(--pass);" id="about-pass">—</div></div>
+            <div class="metric-card"><div class="summary-label">Fail</div><div class="big-num fail" style="color: var(--fail);" id="about-fail">—</div></div>
+          </div>
+        </div>
+
+        <div class="about-card">
+          <h3>Features used</h3>
+          <p>The model extracts six signals from each URL and combines them as a weighted log-odds average. Heaviest weight on the domain — by far the strongest predictor.</p>
+          <div class="metric-grid">
+            <div class="metric-card"><div class="summary-label">Domain</div><div class="summary-val">3.0×</div></div>
+            <div class="metric-card"><div class="summary-label">URL path id</div><div class="summary-val">2.5×</div></div>
+            <div class="metric-card"><div class="summary-label">Enterprise</div><div class="summary-val">2.0×</div></div>
+            <div class="metric-card"><div class="summary-label">Category</div><div class="summary-val">1.5×</div></div>
+            <div class="metric-card"><div class="summary-label">car_replace_bg</div><div class="summary-val">1.0×</div></div>
+            <div class="metric-card"><div class="summary-label">Extension</div><div class="summary-val">0.5×</div></div>
+          </div>
+        </div>
+
+        <div class="about-card">
+          <h3>Validation</h3>
+          <p>20% held-out test split (stratified). <strong style="color: var(--accent);">AUC = 0.994.</strong> At the default 5% threshold the model catches 90% of fails with 60% precision.</p>
+          <p>Why is AUC so high? In this dataset, failing images cluster heavily in one S3 bucket (<code>spyne-desktop-app</code>), which is itself a strong signal. The model exploits that. New domains never seen before get scored at the base rate and marked <em>Unknown</em>.</p>
+        </div>
+
+        <div class="about-card">
+          <h3>What it cannot do</h3>
+          <p>It does not look at pixels. A pristine image hosted on a "fail-prone" URL will be predicted Fail, and a defective image on a clean URL will be predicted Pass.</p>
+          <p>For real image-content prediction you need a vision model trained on the actual frames — a much heavier project. This tool is the cheap, useful approximation.</p>
+        </div>
+      </div>
+    </section>
+  </main>
 </div>
 
 <script>
+/* === MODEL JSON injected here at build time === */
 const MODEL = {"base_rate":0.004492614833856483,"total_records":1045271,"pass_count":1040575,"fail_count":4696,"domain":{"InvImg2B.autofunds.net":0.0028,"assets.cai-media-management.com":0.0039,"bigmotoringworldimages.blob.core.windows.net":0.0036,"cdn-img.vincue.net":0.0023,"content.homenetiol.com":0.0041,"d2ivfcfbdvj3sm.cloudfront.net":0.0041,"photos.liquidmotors.com":0.0037,"spyne-acceleration.s3-accelerate.amazonaws.com":0.0003,"spyne-desktop-app.s3.amazonaws.com":0.5904,"spyne-media.s3.amazonaws.com":0.0002,"spyne-media.s3.us-east-1.amazonaws.com":0.0021,"spyne-prod-app-assets.s3.us-east-1.amazonaws.com":0.0012,"spyne-prod-tech.s3.amazonaws.com":0.0,"spyne-test.s3.us-east-1.amazonaws.com":0.0019},"category":{"360_exterior":0.0001,"360_original":0.0003,"360int":0.396,"3D_Model":0.0,"Exterior":0.0038,"Focus Shoot":0.0165,"Interior":0.0037,"Miscellaneous":0.0011,"hotspot_frame":0.0006},"enterprise":{"1UpAutomotive":0.0012,"2d5f0eb5f Dellenbach Motors":0.0119,"35 INCH BILISIM SANAYI VE TICARET A.S.":0.0001,"4 Season Motors LLC":0.0031,"4M Autoplex":0.0139,"5 Star Imports":0.0003,"A2B Direct Cars Ltd":0.0007,"ARJ\u2019s Auto Sales":0.001,"ASK Motors":0.0023,"AUTO HOUSE NRB":0.0012,"AX Auto INC":0.0326,"AceAutoInc":0.0007,"Adams Chevrolet Inc":0.0156,"Adliv Motors Ltd T/A AutoXpress":0.0003,"Ado's Motors LLC":0.0025,"Advantage Toyota":0.0018,"Airpark Motor Cars LLC":0.0019,"Al Abdulghani Motors":0.0006,"Al Piemonte":0.0073,"Alliance Automotive of Westchester LLC dba White P":0.0065,"Alliance Cars Limited":0.0042,"Alonso Automocion":0.0027,"Alpha Motor Club":0.001,"Amato Hyundai Of Glendale":0.0311,"Amatoscar comercio autom\u00f3vel s.a":0.0094,"Amigo Auto Group, Inc.":0.0014,"Antinell Ltd":0.0012,"Apex Automotive Group":0.0094,"Approval Genie (6929290 Canada Corp.)":0.0009,"Ariana Motors":0.0003,"Arora Holdings Llc dba Hyundai of Milledgeville":0.0025,"Asa Auto Plaza Of Austin":0.0055,"Asbj\u00f8rn Biler Aps":0.0025,"Asbury Automotive Group":0.0008,"Asbury Automotive Management L.L.C":0.0126,"Ashland Auto Sales":0.0012,"Audi Cape Fear":0.0001,"Austin Ford CDJR":0.0009,"Autmotive Marketing Solution - Main":0.001,"Auto DR":0.0018,"Auto Dobrovolny V.M. s.r.o.":0.0246,"Auto Export Corporation":0.0007,"Auto Express Credit":0.0009,"Auto Freak":0.0022,"Auto Gallery Automotive Group":0.0107,"Auto Market Place":0.0005,"Auto Ocasi\u00f3n Saez":0.0017,"Auto Park Ford of Bremen & Auto Park Ford of LaPor":0.0071,"Auto Reum":0.0008,"Auto Smart, LLC":0.0007,"Auto Works":0.0,"Auto X-Change Inc":0.0014,"AutoGiant USA":0.0041,"AutoSphere Group limited":0.0019,"Autoever Limited":0.0006,"Autohaus Moser Srl":0.0009,"Autoland":0.0104,"Automatch":0.0004,"Automoviles Belzuz SL":0.0002,"Automoviles Rolacar S.L":0.0022,"Autoplex 2000 and All Star Buick GMC truck":0.0021,"Autorola de Mexico":0.001,"Autos BEGOSE Motor S.L":0.0026,"Autos of Forney":0.0303,"Autova":0.0019,"BMI AUTO":0.0017,"BP AUTO FINDERS":0.0007,"BPR MOTORS":0.0292,"BROWN BROTHERS AUTOMOTIVE":0.001,"Baker Cadillac, Inc":0.0006,"Bapchild Motoring World (Kent) Limited":0.0054,"Baracar":0.0011,"Beadle Ford, INC.":0.0004,"Beaver County Auto":0.0029,"Bemer Motor Cars":0.0006,"Bemidji Chrysler & Honda of Bemidji":0.0093,"Ben Clymer's The Body Shop":0.1354,"Benitez Auto Group":0.0086,"Bentley Jacksonville":0.0204,"Bergstrom Automotive":0.0062,"Best Deal Auto Sales, INC.":0.0041,"Beverly Hills Auto Group":0.0031,"Big Valley Ford":0.0778,"Bilar99e Oy":0.0003,"Bill Cole AutoMall Bluefield":0.005,"Bill Dickason Chevrolet":0.0006,"Bilmaklaren":0.0013,"Blasius Buick GMC":0.0147,"Blasius Kia":0.0011,"Blasius North":0.0003,"Blasius South":0.0021,"Boardman Subaru and Imports":0.004,"Bob Allen Ford- Ottawa":0.0072,"Bob Johnson Automotive Group":0.0031,"Bob King":0.0039,"Bob Moore Volkswagen":0.0106,"Bosstown Motors":0.0023,"Brandon Steven Motors":0.0048,"Bravo Automotive Group, LLC":0.0003,"Bravo Autos":0.0002,"Bridgeton Auto Mall":0.0002,"Brothers Auto Group":0.0014,"Buckhannon Toyota":0.002,"Buckingham Hyundai":0.0006,"Buy4Drive_Annually":0.0025,"C.A. Larsen Automobiler A/S":0.0086,"C360 - Sotileza":0.0004,"C360-Mutua Alhambra":0.0006,"C360_Safety Car":0.0004,"CARS24 Services Private Limited":0.0007,"CUBRAIN DESIGN STUDIO S.R.L.":0.0015,"Calgary Truck":0.0006,"Capital Chevrolet Inc.":0.011,"Capital City Auto":0.0018,"Capital City Ford Lincoln Toyota":0.0014,"Capitol Auto of Smithfield":0.0005,"Car Bargain":0.0091,"Car Bazaar":0.0138,"Car Capital LTD":0.0533,"Car Castle":0.0223,"Car Central":0.0191,"Car Central Inc.":0.0003,"Car City INC":0.0082,"Car Hop Auto Sales & Finance":0.0,"CaricarzSdnBhd":0.0159,"Carify Auto Corp":0.001,"Carlot Hawaii":0.0004,"Carove Automoviles":0.0017,"Carsa":0.0,"Carz.je":0.002,"Certified Autoplex Inc.":0.0011,"Charlie Clark Hyundai":0.004,"Chevy Chase Acura":0.0003,"Chip Tuning Finland Oy (Autolux)":0.0004,"Clarvio":0.0007,"Clear Auto Dartmouth":0.0089,"Clear Car Group LTD":0.0016,"Colonial Cadillac of Woburn":0.0005,"Columbus Motorcars LLC DBA - Great Lakes Hyundai o":0.0113,"Common Merchandising - live":0.0002,"Community Ford of Mooresville":0.0076,"Community Motors":0.007,"Cornhusker Auto Center":0.0035,"Countryside Mitsubishi":0.0015,"County Ford":0.0088,"Courtesy Chevrolet Center San Diego":0.0002,"Covert Auto Group":0.0038,"Covert Ford Lincoln":0.0002,"Curry Acura":0.0004,"Curry Chevrolet":0.0032,"DIOGO MANUEL DA COSTA SANTOS UNIPESSOAL LDA":0.0451,"DRC Auto Sales":0.0004,"DRIVE MOTOR GROUP SA":0.0009,"Dave Knapp Ford Lincoln":0.0011,"Dave Syverson Auto Center":0.0009,"Davidson Auto Group":0.0256,"Dealer Specialties, LLC":0.0,"DealerVision.com":0.0037,"Dean Carter Chevrolet":0.0039,"Deery Brothers Ford":0.0067,"Denver Auto":0.0292,"Dick Dyer & Associates":0.0002,"Diffee Ford Lincoln":0.0004,"Dimmitt Automotive Group":0.0009,"Direct Auto":0.0003,"Direct Auto Sales":0.0009,"Dirosan":0.0002,"Dorsett Automotive":0.0088,"Dream Automotive":0.004,"Dubizzle Cars L.L.C":0.0001,"Duffys Auto":0.0108,"EDealer Inc.":0.0,"EV Car Company":0.0128,"EWIGO Saint-Maur-des-Foss\u00e9s":0.0007,"Eagle Ridge Chevrolet Buick GMC":0.0012,"Eastern Digital":0.0024,"Eddie Gilstrap Motors":0.006,"Elite Auto Marketing Solutions":0.0026,"Emerald Chevrolet":0.0004,"Emerald Motors":0.0023,"Energy Motors Limited":0.0027,"Enkae Prestige Motors Ltd":0.0005,"Enterprise Motor Group":0.0065,"Envision Management Group":0.02,"Etel\u00e4n Autoliike Oy (ltd.)":0.0004,"Euro Motorcars":0.0015,"Event Motoring":0.0428,"Falk Hjort Biler ApS":0.0022,"Faricy Ford":0.0074,"Fast Energy Group":0.0019,"Fenice Multimarcas Comercio de Veiculos LTDA":0.0022,"Ferris Chevrolet, Inc":0.0162,"Financia Motors":0.0013,"Fine Cars (Lee on Solent) Ltd":0.0023,"Flexcar":0.0473,"Flexicar":0.0,"Flood Auto Group":0.0227,"Flood Mazda":0.0004,"Fornova, Com\u00e9rcio e Assist\u00eancia de  Ve\u00edculos Lda":0.001,"Forrester Lincoln":0.0002,"Foto-Ops":0.0,"Freedom Chevrolet":0.0359,"G Town Motors":0.0008,"GETCAR LLC":0.0028,"GOPACARS AUTOMOVILES SL":0.0008,"Galleria BMW":0.0061,"Gaye Chevrolet":0.002,"Gedi Route Cars Inc.":0.0018,"Gene Langley Ford":0.0007,"Generation Nissan":0.002,"Georgia Auto World":0.0141,"Germain of Beavercreek I, LLC dba Germain Ford of ":0.0013,"Gettel Automotive Group":0.0074,"Ghost Auto Werkz":0.002,"Glass Capital CDJR":0.026,"Globe Automotive":0.0002,"GoldBoyz Auto Sales":0.0025,"Golden Mile Chrysler Dodge Jeep Ram":0.0007,"Graff Chevrolet of Chesterton":0.0061,"Grand motors Inc O/A oscars motors":0.0014,"Great Lakes Auto Group":0.0,"Greater Chicago Motors":0.0067,"Greenville Automotive Group":0.0004,"Greenway Automotive Group":0.004,"Groton Ford":0.0175,"Gwatney Buick GMC":0.002,"H&K Chevrolet Family Auto":0.0082,"HASANAH GROUP (PTY) LTD":0.0013,"Haldeman Lexus of Princeton":0.0022,"Haley Automotive Group":0.0002,"Harper Chevrolet GMC":0.0022,"Harvest Auto Family":0.0022,"Hawthorne Auto Square":0.0202,"Hershey Motors":0.0112,"Hewlett Volkswagen, LP":0.0001,"Highline Motors Cars Corp":0.0001,"Homan Auto Sales Inc":0.0224,"Hondru Auto Group(US)":0.0222,"House Chevrolet Co.":0.0144,"Husker Chevrolet":0.001,"H\u00e9lder Campos Unipessoal Lda":0.0027,"ICL Autos":0.0023,"IM Marketplace GmBH":0.0015,"IMPOSTA MON. IKE":0.0012,"INERCIKAR SA":0.0068,"Icon Motors Group of Framingham":0.0182,"Ideal Cars":0.0079,"Ideal Centre Ltd T/A Ideal Car Centre":0.0229,"Impex Auto Sales":0.0008,"Island Auto Sales":0.0071,"J & A Ferguson Cars":0.002,"JDBNOW":0.0008,"JDMotorline LTD":0.0004,"JMB Auto Sports":0.0019,"Jaidah Motors and Trading Company":0.0021,"Jan Auto Sales LLC":0.0012,"Janssen Auto Group":0.0154,"Janssen Chrysler Jeep Dodge":0.0145,"Janssen Kool Honda":0.0075,"Janssen Kuenle CDJR":0.0223,"Jeff Kies Auto Sales":0.0003,"Jenkins Auto Group":0.0033,"Jerry Spady Chevrolet GMC Corvette Hummer":0.0025,"Jidd Motors Mitsubishi":0.0062,"Jim O\u2019Connor Select Auto":0.0011,"Jim Schmidt Automotive":0.014,"John Andrew Used Cars":0.0129,"Joseph Toyota Of Cincinnati":0.0012,"Joshua Trownsell":0.0083,"Juettner Motors Inc.":0.0295,"K&f Auto Sales And Service":0.0019,"KL Honda":0.0026,"Karakas Auto":0.0178,"Kazoto SARL":0.0011,"Keffer Inc.":0.0024,"Kempton Chevrolet":0.0095,"Key West Ford Sales Ltd":0.0192,"Kia Cold Lake":0.0017,"Kia Vancouver":0.0002,"Kian Motors INC":0.0227,"Kimberly BMW":0.0015,"Knapp Chevrolet, Inc.":0.0088,"Kolon Mobility Group":0.0002,"Korf Motors":0.0057,"L&Z Trades Company Limited":0.0021,"LES PRESTATIONS DE L'AUTO":0.0013,"LUXIRIDE AUTOS":0.0003,"LUXURY IMPORTS":0.0246,"Lamacchia Honda":0.0005,"Lambert Buick GMC Inc":0.0075,"Landers Dodge Chrysler Jeep RAM":0.0001,"Laramie Peak Motors LLC":0.0097,"Lee Group":0.0009,"Lewis Auto Group":0.0001,"Lewiston Auto":0.0081,"Lexus Of Orland":0.0044,"Lexus of Lehigh Valley":0.0047,"Lexus of Merrillville":0.0005,"Lindholm Biler A/S":0.0016,"Lockwood Motors, Inc.":0.0072,"Long Automotive Group":0.0222,"Long Island Sports Cars":0.0121,"Loyalty Chevrolet/Cadillac":0.0017,"Loyalty Nissan of Red Pump":0.0075,"Loyalty Toyota":0.0026,"Loyalty Used Car Supercenter":0.0008,"Loyalty Volkswagen":0.0018,"Luxury Auto Plex":0.0022,"LuxuryMotorCars":0.0271,"MAG CHRYSLER DODGE JEEP RAM":0.0002,"MAG Rotherham Ltd.":0.0,"MB Motors":0.0006,"MEI Inc":0.0085,"MOJSIUK Sp":0.0014,"MP auto Sales LLC DBA Carizona":0.0108,"MY NAGHI":0.0077,"Magnum Car Sales":0.0007,"Main Street Motors":0.1194,"Marano & Sons Auto Sales":0.0003,"Marthaler Honda":0.0003,"Marthaler Honda of Ashland":0.011,"McCurley Dealerships":0.0047,"McGrath Acura of Westmont (Mcgrath Imports)":0.0015,"Mccurley Subaru Of Yakima":0.0029,"Medgaarden's Southwest Sales Inc":0.0017,"Median Media LLC":0.0053,"Mega Dealer":0.0,"Megasell Auto Group":0.0018,"Mercedes-Benz Of Columbus":0.0076,"Mercedes-Benz of Portsmouth":0.0652,"Meyer Imports DBA Berwyn Kia":0.0004,"Miami Acura":0.0004,"Midway Dodge":0.0064,"Modern Classic Motors INC":0.0021,"Moffitt's Ford":0.0023,"Mondial car Sarl":0.0007,"Montgomery Moore":0.0034,"Moore Motor Sales":0.0004,"Moses Auto Group":0.0119,"Mossy Motors":0.0027,"Moto Pfohe EOOD":0.0012,"Motorland":0.0237,"Motorline Auto Group":0.0018,"Motorpedia365 Revolution Private Limited":0.0022,"Mount Airy Nissan":0.0003,"Mt Orab Chevy":0.0052,"Muelas SA":0.0025,"NJ Auto Haus":0.0004,"NOVA AUTOMOBILE":0.0004,"NZC Auckland":0.0014,"National Auto Trust Company":0.0042,"Nelson Automotive Inc":0.0006,"NetLook, Inc":0.0007,"Netlook Prod All Image ":0.0001,"Netlook Prod Exterior only ":0.0,"New Deal Pre-Owned Autos":0.0001,"Njord ApS":0.0038,"Noblesville Imports":0.0004,"Northgate Auto company LLC":0.0021,"Northpoint Toyota _ Australia":0.0019,"Northstar Kia":0.0129,"Northwest Indiana Auto Finance":0.0005,"Novacti":0.0081,"ONE STOP MOTORS MMB LTD":0.0022,"Ohio Specialty Services, LTD.":0.0008,"Olson Chevrolet":0.017,"Olympic Hyundai Vancouver":0.0386,"Omnetic":0.0001,"Orangeville Hyundai":0.0014,"PYK Cars Center Co. Ltd":0.0005,"Paragon Motors of Woodside Inc dba Paragon Honda":0.0126,"Park Cities Chrysler Dodge Jeep Ram Fiat & Bishop ":0.0036,"Parks Chevrolet Richmond":0.0068,"Pdx Wheels, Steals & Deals":0.0343,"Pearl Chrysler Jeep Dodge & Ram":0.0005,"Peragnoli Auto S.R.L":0.0011,"Perfection Auto Detailing & Wheels":0.0021,"Performance Auto Group":0.0127,"Performance Automotive Network":0.0088,"Perkins Motors":0.0306,"Petersen CDJR":0.0045,"Phelps Chevrolet":0.0348,"Photo Pixel":0.0014,"Piryani Pty Ltd TA Galaxy Autos":0.0022,"Pixel Cars":0.0005,"Planet Honda, Planet Hyundai, Leo Payne Honda & Ge":0.0042,"Platinum Cars":0.0018,"Pointe Buick Gmc":0.0111,"Porsche Inter Auto BG EOOD":0.0011,"Portsmouth Ford Lincoln":0.0086,"Post Oak Toyota":0.0125,"Prestige Auto Sales":0.0105,"Preston Motor Automotive Group":0.0054,"Princeton Chevrolet GMC":0.0003,"Pritchard Companies":0.0132,"Puente Hills Mitsubishi":0.0088,"QA Imports Pty Ltd":0.0023,"Qatar Living":0.0004,"Quality Cars Zaventem":0.0011,"Quantrell Auto Group":0.0033,"Quebec Inc.":0.0021,"ROCHESTER VOLKSWAGEN":0.001,"Rainbow Motor Sales":0.0017,"Raleigh Imports":0.0008,"Ramsey Motor Company":0.0247,"Ramstien Used Cars":0.0001,"Rawian Oy":0.0368,"Reliance Motor Group LLC":0.0006,"Renny Bettan":0.0677,"Richard lawson autoecosse":0.0116,"RideLine":0.0021,"Rideau Valley Motors":0.0006,"Right Move Auto Sales (GBP)":0.0022,"Riley Subaru":0.0046,"Rn3 Automobiles":0.0008,"Roanoke Motors Inc":0.0047,"Robert street auto sales":0.0005,"Rochester Toyota":0.0109,"Rohrich Automotive Group":0.0076,"Rolls-Royce Motor Cars Raleigh":0.0073,"Rons Automotive/Carzlane Inc":0.0019,"Royalty Autohaus ":0.0014,"Runde Chevrolet, Inc.":0.0037,"Rusnak Auto Group - Mercedes- Benz of Arcadia":0.0059,"Russ Darrow Group, Inc.":0.0039,"Russo Auto Sales":0.0024,"Ryan Buick GMC Cadillac":0.0068,"S A C USED CAR TRADING L.L.C":0.0001,"S&L Motors, Pulaski WI":0.0123,"S&S Motors":0.0029,"SAARRTH PEHLIGAADI PRIVATE LIMITED":0.0011,"SAN DIEGO ECARS":0.001,"SAS SELLIT":0.0009,"SI Vallett Auto Sales":0.0716,"SLEEK CARS LIMITED":0.0022,"Safy Auto Sales":0.0009,"Saga Motor Group":0.0027,"Sakura Motors London LTD":0.006,"Sansone Jr's Auto Group":0.0039,"Santa Motors CA":0.0179,"Scotland Motors, Inc.":0.0018,"Seattle Jeep":0.0316,"Sell Em All Motors":0.0001,"Servicars srl":0.0007,"Sewell Family of Companies":0.0015,"Shawnee Mission Ford":0.0007,"Shelly Motors Ltd":0.0176,"Sherwood Ford":0.0023,"Silsbee Ford":0.0369,"Silverline Auto Group":0.0458,"Simmons-Rockwell Automotive Dealerships":0.0088,"Sithari Cars Limited":0.0004,"Smartlot All image set":0.0002,"Smartlot Solutions":0.0044,"Soave Automotive Group":0.0009,"Sound auto and finance":0.001,"Southern Ford of Thomaston":0.0013,"Southey Ford":0.0009,"Spangler Subaru":0.0158,"Speck Dealerships":0.01,"Speedway Car Sales":0.0139,"Sport Car srl":0.0025,"Springfield Luxury Automall":0.0245,"Spyne":0.0023,"Star Motors":0.005,"Starling Auto Group":0.0049,"Starling Chevrolet":0.0023,"Startin Group":0.0018,"Sterling Acura of Austin":0.0004,"Strategic Vehicle Solutions":0.0032,"Street Automotive SL":0.0076,"Street Toyota":0.0021,"Subaru Calgary":0.0007,"Subaru of Cherry Hill LLC":0.0006,"Subaru of Columbia (CMSUB, LLC)":0.005,"Subaru of Wesley Chapel":0.0005,"Sunny and 70 Auto Sales, LLC":0.0013,"Superb Auto Sales":0.0025,"Superior Auto, INC":0.0002,"Swiss Cargate GmbH":0.0026,"Szilagyi Gabriella":0.0003,"S\u00f8rby Autocenter":0.0026,"TNS Autosports":0.0056,"TORSVIKS BIL AB":0.0068,"TVS CERTIFIED PRIVATE LIMITED":0.0001,"TX Auto Group":0.0797,"Tauke Motors Incorporated":0.0003,"Taylor BMW":0.0026,"Team Nissan Inc":0.0005,"Teton solutions Group":0.0042,"The Ford Store Morgan Hill":0.0004,"The Garage":0.01,"The Used Car Guys GMBH":0.0002,"Think Reliable Auto":0.0004,"Tolj automobili d.o.o":0.0017,"Toronto Honda":0.0013,"Towne Ford Inc":0.002,"Toyota Of Wallingford":0.0059,"Toyota of Massapequa":0.0007,"Trevinos Auto Mart ltd":0.0009,"Tri County Ford":0.006,"Tropical Used Cars":0.0001,"Tru West Auto":0.0074,"Turpin Dodge Chrysler Jeep Ram":0.0123,"Twin Rivers Auto Group":0.0141,"UNIDAS LOCADORA S.A.":0.0,"United Motorz Inc":0.0005,"VW of Duluth":0.0032,"Van Horn Automotive Group":0.0067,"Van Mossel":0.0001,"Vatland Auto Group":0.0045,"Vayper Automoci\u00f3n S.L.U":0.0026,"Vehixpro":0.0004,"Velocity Automotive Inc":0.0015,"Victory Automotive Group":0.0024,"Victory Motors - Chesterfield":0.0008,"Vincue-Prod":0.0,"Vindevers Autohaus of Sylvania":0.0049,"Vivition":0.0004,"Volkswagen of Wesley Chapel":0.0001,"Volvo Cars Fort Washington":0.0006,"Volvo Cars Palm Springs":0.0026,"Volvo of Princeton Inc":0.0002,"V\u00c4RNAMO BILAFF\u00c4R AB":0.0019,"Waco Hyundai":0.0005,"Walker Jones Chevrolet":0.0007,"Wallingford Auto Park, Inc.":0.0011,"Walt Massey Chrysler Dodge Jeep Ram Fiat":0.0036,"Watermark Ford Hyundai":0.0097,"West Mitsubishi":0.0394,"White Bear Lincoln":0.0007,"Whitewater Motors Incorporated":0.0005,"Willowbrook Ford & Kia":0.0003,"Wiz Leasing Inc":0.025,"Wood Motor Company":0.0031,"World Car Auto Group":0.0058,"Worldwide Motors LTD dba Paragon Acura":0.008,"XYZ Motors":0.0009,"Yemm Auto":0.0267,"Yoder Family of Companies":0.0073,"Yoga Cars":0.0136,"Yokem Motors LLC DBA Yokem Toyota":0.0009,"Yonkers Auto Gallery, LLC":0.0134,"Your Choice Auto LLC":0.0132,"ZT Automotive":0.022,"Zara Auto Sales Inc":0.0002,"Zeigler Hyundai of Racine":0.0001,"Zim's Auto Sales & Services Inc":0.006,"Zink Motor Company":0.0056,"c360-autosa":0.0017,"c360-bmw":0.0001,"c360-canaauto":0.0006,"c360-fecosauto":0.0007,"c360-grupmibec":0.0009,"c360-gyata":0.0023,"c360-muy cars":0.0014,"c360-ocasionplus":0.0001,"c360-torresdreamcars":0.0006,"c360-vians":0.0004,"carizy_1":0.0,"carmedia prod":0.0018,"cars24- new project":0.0015,"carvago test account":0.0011,"carvago2":0.0002,"common merchandising":0.0,"dealcar_v2":0.0001,"dealer speciality 360":0.0,"dimmitt automotive-bentley tampa bay":0.0011,"ds trial":0.0009,"flexi car green":0.0021,"greenway auto group 2":0.0028,"jr motors megadealers":0.0022,"mclarty auto group (ams)":0.0017,"mears auto group":0.0054,"ml autos":0.0018,"mp-auto-trgovina":0.016,"nada - 1":0.0004,"nada - 2":0.0004,"neelima motors":0.0,"orr chevy cadillac":0.0026,"orr nissan (ams)":0.0006,"spyne flip":0.0001,"toronto best auto":0.0024},"url_ent_id":{"008bd89e8":0.0734,"00d2aafe9":0.5093,"00e6652a1":0.2889,"038268a7d":0.1467,"041b66a4f":0.1849,"05c8dbbe2":0.0847,"07dda277e":0.0011,"0933d658a":0.4805,"0980fbfb5":0.1467,"0b430981d":0.2086,"0c4830006":0.0315,"0c519f5f2":0.1784,"0d1f288be":0.2342,"0eee6a3c0":0.1829,"10068fb52":0.0039,"10bb841f8":0.5931,"1145eab0b":0.0577,"11c8ecc4b":0.1573,"124028d6b":0.0307,"1291a4fc6":0.3431,"12dd17590":0.4892,"13-11-1447":0.0036,"135be0327":0.5995,"1713df08e":0.431,"1953dbe6b":0.3967,"1O103VCUW":0.5952,"1f3dcfbe3":0.2697,"1f58a4527":0.1088,"2025-06-03":0.0032,"2025-06-04":0.0026,"2025-06-05":0.0037,"2025-06-06":0.0032,"2025-06-07":0.0027,"2025-06-09":0.0033,"2025-06-12":0.0036,"2025-06-13":0.0034,"2025-06-18":0.0035,"2025-06-19":0.0021,"2025-06-20":0.0031,"2025-06-25":0.0029,"2025-06-26":0.0031,"2025-07-10":0.0037,"2025-07-17":0.0035,"2025-07-23":0.0036,"2025-07-31":0.0025,"2025-08-07":0.0021,"2025-08-13":0.0031,"2025-08-15":0.0035,"2025-08-20":0.0037,"2025-08-27":0.0037,"2025-09-01":0.0039,"2025-09-03":0.0037,"2025-09-09":0.0031,"2025-09-26":0.0036,"2025-09-27":0.0035,"2025-10-04":0.0037,"2025-10-13":0.0039,"2025-10-16":0.0039,"2025-10-17":0.0029,"2025-10-21":0.0036,"2025-10-22":0.0033,"2025-10-29":0.0029,"2025-10-30":0.0004,"2025-10-31":0.0023,"2025-11-04":0.0026,"2025-11-05":0.0035,"2025-11-06":0.0039,"2025-11-09":0.0037,"2025-11-10":0.0036,"2025-11-12":0.0035,"2025-11-14":0.0028,"2025-11-20":0.0018,"2025-11-21":0.0035,"2025-11-24":0.0023,"2025-11-28":0.0036,"2025-11-30":0.0039,"2025-12-01":0.0034,"2025-12-02":0.0003,"2025-12-03":0.0029,"2025-12-04":0.0028,"2025-12-05":0.0035,"2025-12-06":0.0022,"2025-12-09":0.0025,"2025-12-11":0.0028,"2025-12-12":0.0007,"2025-12-13":0.0024,"2025-12-14":0.0036,"2025-12-16":0.0032,"2025-12-17":0.0029,"2025-12-20":0.0024,"2025-12-21":0.0035,"2025-12-25":0.0037,"2025-12-26":0.003,"2026-01-01":0.0039,"2026-01-03":0.0031,"2026-01-05":0.0016,"2026-01-08":0.0024,"2026-01-09":0.0026,"2026-01-13":0.0025,"2026-01-15":0.0031,"2026-01-16":0.0031,"2026-01-17":0.0023,"2026-01-19":0.0009,"2026-01-20":0.0007,"2026-01-22":0.0029,"2026-01-27":0.0039,"2026-01-28":0.0023,"2026-01-29":0.0021,"2026-01-30":0.0017,"2026-01-31":0.0031,"2026-02-01":0.0028,"2026-02-03":0.0008,"2026-02-04":0.0031,"2026-02-06":0.0039,"2026-02-07":0.0032,"2026-02-09":0.0024,"2026-02-10":0.003,"2026-02-11":0.0037,"2026-02-12":0.0014,"2026-02-13":0.0016,"2026-02-14":0.0028,"2026-02-15":0.0034,"2026-02-16":0.0025,"2026-02-17":0.0028,"2026-02-18":0.0017,"2026-02-19":0.0009,"2026-02-20":0.0014,"2026-02-21":0.0016,"2026-02-23":0.0017,"2026-02-24":0.0024,"2026-02-25":0.0015,"2026-02-26":0.0025,"2026-02-27":0.0006,"2026-02-28":0.0018,"2026-03-01":0.0013,"2026-03-02":0.0023,"2026-03-03":0.0006,"2026-03-04":0.0006,"2026-03-05":0.0019,"2026-03-06":0.0018,"2026-03-07":0.0019,"2026-03-08":0.0031,"2026-03-09":0.0016,"2026-03-10":0.0003,"2026-03-11":0.0004,"2026-03-12":0.0006,"2026-03-13":0.0013,"2026-03-14":0.0006,"2026-03-15":0.0028,"2026-03-16":0.0006,"2026-03-17":0.0002,"2026-03-18":0.0016,"2026-03-19":0.0011,"2026-03-20":0.0001,"2026-03-21":0.0014,"2026-03-22":0.0029,"2026-03-23":0.0005,"2026-03-24":0.0012,"2026-03-25":0.0003,"2026-03-26":0.0002,"2026-03-27":0.0009,"2026-03-28":0.0009,"2026-03-29":0.0035,"2026-03-30":0.0015,"2026-03-31":0.0011,"2026-04-01":0.0007,"2026-04-02":0.001,"2026-04-03":0.0002,"2026-04-04":0.0005,"2026-04-05":0.0012,"2026-04-06":0.0003,"2026-04-07":0.0005,"2026-04-08":0.0004,"2026-04-09":0.0003,"2026-04-10":0.0004,"2026-04-11":0.0008,"2026-04-12":0.001,"2026-04-13":0.0005,"2026-04-14":0.0002,"2026-04-15":0.0006,"2026-04-16":0.0002,"2026-04-17":0.0001,"2026-04-18":0.0005,"2026-04-19":0.0009,"2026-04-20":0.0003,"2026-04-21":0.0002,"2026-04-22":0.0004,"2026-04-23":0.0001,"2026-04-24":0.0001,"2026-04-25":0.0001,"2026-04-26":0.0002,"2026-04-27":0.0,"2026-04-28":0.0002,"2026-04-29":0.0001,"2026-04-30":0.0003,"2026-05-01":0.0018,"2026-05-02":0.0005,"2026-05-03":0.0007,"2026-05-04":0.0015,"2026-05-05":0.0007,"2026-05-06":0.0009,"2026-05-07":0.0092,"2026-05-08":0.0006,"2026-05-09":0.0034,"2026-05-10":0.0018,"2026-05-11":0.0,"2026-05-12":0.0002,"2026-05-13":0.0001,"2026-05-14":0.0016,"2026-05-15":0.0011,"2026-05-16":0.0082,"2026-05-18":0.0001,"2026-05-19":0.0005,"20bde9997":0.412,"21de286e9":0.5153,"22af275f9":0.0411,"24e5c9f25":0.1149,"257cc21aa":0.1658,"2626fb4ab":0.2284,"266afc91d":0.0315,"271f77862":0.1986,"28-04-2026":0.0035,"285e87825":0.0039,"29-04-2026":0.0039,"2affb0f18":0.2342,"2b86e64ed":0.1903,"2b8948cea":0.2856,"2b97abb6f":0.1388,"2bcab8871":0.0896,"2bee617cb":0.1784,"2c96bae5e":0.1984,"2d410b1b9":0.3255,"2e3642c1f":0.0035,"2f39623ab":0.0018,"30-04-2026":0.0032,"32aa2472d":0.1252,"32edbe021":0.0039,"33b28d1f4":0.0765,"3594c01ab":0.0697,"36b12b7fb":0.0037,"3756e853d":0.0827,"3bcb3b851":0.3793,"3c04c87a2":0.2856,"3eb8f259d":0.2827,"3f55cc067":0.0847,"411229b38":0.0035,"414beed75":0.0577,"442e5dc24":0.1614,"464341d89":0.0035,"481280154":0.1305,"48d291b7d":0.1713,"49c19efb3":0.3037,"4a9553ec1":0.2303,"4b8b865fd":0.1878,"4beaa71ca":0.5361,"4f772edd8":0.5053,"4fefabd10":0.0035,"5050e8479":0.0028,"51f47b569":0.2474,"5292dd88c":0.1133,"568f9632d":0.0203,"58b2e7e60":0.1937,"58e0896f7":0.0039,"58edc61c0":0.0037,"59545e255":0.0324,"5a1a55a03":0.2795,"5a3805c98":0.203,"5aae59ef8":0.3238,"5ab683aff":0.0534,"5cc357db7":0.322,"5d9811ccd":0.0562,"5e8a22e2a":0.0032,"5f1f58407":0.1426,"5fd31e3bc":0.329,"6104feedc":0.0547,"61c968504":0.003,"62b56bdae":0.0029,"640edb0f7":0.2797,"6454b95ba":0.6424,"6460d434f":0.5167,"65027084d":0.0035,"652ef9315":0.5022,"65bb3c871":0.0712,"65c4c0ee4":0.0847,"65c97c6aa":0.3834,"65ebbb271":0.3417,"673fce097":0.0247,"67b1565d7":0.0344,"68cc99693":0.0236,"68fe4f5eb":0.7532,"6a10d4a7d":0.2582,"6add25efd":0.1731,"6b212a82f":0.2856,"6d7a9d414":0.0036,"6f158bbb9":0.0035,"716d304ef":0.1426,"737a78084":0.0029,"79faced13":0.1496,"7a0316bc8":0.494,"7a2bacfec":0.1586,"7d06f7427":0.0562,"8029ea3a5":0.1878,"81d94123f":0.1534,"82255fce5":0.1559,"838db311d":0.1149,"83b02cc1c":0.1496,"844554576":0.2752,"85b35506d":0.0627,"87afb1c14":0.4144,"87b2e0c86":0.2228,"88b67d13e":0.0547,"8bbc0dce6":0.1534,"8e01fd835":0.7377,"8e2f0d75a":0.0218,"8eafe01f6":0.1658,"9016eb535":0.0028,"90410e297":0.4906,"927d8b415":0.405,"927f9af2f":0.0485,"9360a5821":0.1426,"93b8cc9c8":0.0804,"93f92de4e":0.1467,"9489ec587":0.1034,"94fc0aa70":0.0039,"9677b7758":0.1928,"96d596c79":0.1661,"970376e28":0.3361,"9760K371U":0.2794,"99c36f997":0.1659,"9aaa4f1f4":0.3627,"9bb0e68c6":0.2175,"9cafef7cb":0.2252,"9d7892a1e":0.3133,"9f9d43dd0":0.0252,"AI":0.0055,"InventoryImages":0.0028,"Processed":0.0037,"QJC7Y1H68":0.2599,"a08cdd6df":0.2086,"a2941db1d":0.5281,"a45469aae":0.2541,"a4e592040":0.2379,"a5c8cdf57":0.0591,"ab71c1f45":0.0264,"acd986f51":0.0241,"ad2559dcd":0.1614,"aef07d3d0":0.2141,"b047d91bc":0.1394,"b0cf1df81":0.0766,"b3b685b8c":0.0039,"b4745ec79":0.174,"b542e23cc":0.1284,"b733cdf5d":0.4009,"b81a8498a":0.1986,"b9949e885":0.199,"b9ef6e63e":0.3686,"bafd919bb":0.1467,"bb1d04fd0":0.4448,"bb63009cf":0.4873,"bd0d02ef3":0.0037,"be8c747b2":0.1892,"c2df3101d":0.1022,"c95e31793":0.0464,"c9ad8d13f":0.1118,"cdca96e86":0.1825,"cdcfb6158":0.1692,"cdea95437":0.0036,"ce93dfe80":0.1534,"cecef60ce":0.0019,"cfa16f31b":0.0324,"d058bfeb5":0.061,"d05d096b7":0.2919,"d1319edae":0.0562,"d45432dcd":0.0681,"d4aac809f":0.4207,"d71edc99b":0.0037,"d8dd768a0":0.2034,"d94a891e5":0.2421,"d9e6f6263":0.3867,"e2394e4d7":0.3646,"e258a7579":0.2413,"e2ea1524e":0.1878,"e73a02036":0.0036,"e7c70ee5c":0.401,"e80cf936b":0.3161,"e91b8a8fe":0.2252,"eaab7f702":0.4027,"eb4f0c7af":0.1461,"ebc6eda0a":0.1658,"ec7fa01a5":0.0562,"ef09d889d":0.229,"efd988503":0.0025,"f01410f91":0.061,"f0a3aeb41":0.2086,"f2c1c3e12":0.4827,"f37e2e818":0.0032,"f41cf9b81":0.0896,"f4c604f67":0.1785,"f55c43f3a":0.2284,"f5d12670d":0.3524,"f88f486fb":0.0036,"f8c8d9175":0.0347,"f95f2d883":0.1426,"f968f02c4":0.1351,"fa07d6b63":0.2589,"fb11e671a":0.0901,"fcc547850":0.5942,"fdfde0db4":0.0029,"ffc453a6b":0.5676,"image":0.0023,"raw-car-images":0.0036,"resize":0.0039,"uploads":0.0608},"ext":{"jpeg":0.0026,"jpg":0.0042,"png":0.0049,"webp":0.0395},"crb_with":0.0001841052303700678,"crb_without":0.03293700614828859,"domain_counts":{"InvImg2B.autofunds.net":18,"assets.cai-media-management.com":5,"bigmotoringworldimages.blob.core.windows.net":7,"cdn-img.vincue.net":29,"content.homenetiol.com":3,"d2ivfcfbdvj3sm.cloudfront.net":3,"photos.liquidmotors.com":6,"spyne-acceleration.s3-accelerate.amazonaws.com":417,"spyne-desktop-app.s3.amazonaws.com":7584,"spyne-media.s3.amazonaws.com":1022181,"spyne-media.s3.us-east-1.amazonaws.com":33,"spyne-prod-app-assets.s3.us-east-1.amazonaws.com":3368,"spyne-prod-tech.s3.amazonaws.com":10539,"spyne-test.s3.us-east-1.amazonaws.com":1074},"enterprise_counts":{"1UpAutomotive":78,"2d5f0eb5f Dellenbach Motors":234,"35 INCH BILISIM SANAYI VE TICARET A.S.":1621,"4 Season Motors LLC":979,"4M Autoplex":339,"5 Star Imports":357,"A2B Direct Cars Ltd":167,"ARJ\u2019s Auto Sales":107,"ASK Motors":470,"AUTO HOUSE NRB":87,"AX Auto INC":557,"AceAutoInc":163,"Adams Chevrolet Inc":364,"Adliv Motors Ltd T/A AutoXpress":363,"Ado's Motors LLC":24,"Advantage Toyota":618,"Airpark Motor Cars LLC":40,"Al Abdulghani Motors":189,"Al Piemonte":261,"Alliance Automotive of Westchester LLC dba White P":1072,"Alliance Cars Limited":477,"Alonso Automocion":20,"Alpha Motor Club":100,"Amato Hyundai Of Glendale":617,"Amatoscar comercio autom\u00f3vel s.a":305,"Amigo Auto Group, Inc.":2179,"Antinell Ltd":87,"Apex Automotive Group":3479,"Approval Genie (6929290 Canada Corp.)":118,"Ariana Motors":399,"Arora Holdings Llc dba Hyundai of Milledgeville":420,"Asa Auto Plaza Of Austin":540,"Asbj\u00f8rn Biler Aps":23,"Asbury Automotive Group":129,"Asbury Automotive Management L.L.C":51825,"Ashland Auto Sales":87,"Audi Cape Fear":941,"Austin Ford CDJR":116,"Autmotive Marketing Solution - Main":4898,"Auto DR":46,"Auto Dobrovolny V.M. s.r.o.":179,"Auto Export Corporation":150,"Auto Express Credit":120,"Auto Freak":32,"Auto Gallery Automotive Group":3361,"Auto Market Place":261,"Auto Ocasi\u00f3n Saez":48,"Auto Park Ford of Bremen & Auto Park Ford of LaPor":1253,"Auto Reum":147,"Auto Smart, LLC":150,"Auto Works":8324,"Auto X-Change Inc":64,"AutoGiant USA":2665,"AutoSphere Group limited":41,"Autoever Limited":179,"Autohaus Moser Srl":114,"Autoland":79,"Automatch":272,"Automoviles Belzuz SL":742,"Automoviles Rolacar S.L":31,"Autoplex 2000 and All Star Buick GMC truck":2369,"Autorola de Mexico":104,"Autos BEGOSE Motor S.L":21,"Autos of Forney":305,"Autova":568,"BMI AUTO":50,"BP AUTO FINDERS":155,"BPR MOTORS":43,"BROWN BROTHERS AUTOMOTIVE":103,"Baker Cadillac, Inc":207,"Bapchild Motoring World (Kent) Limited":12062,"Baracar":92,"Beadle Ford, INC.":300,"Beaver County Auto":361,"Bemer Motor Cars":200,"Bemidji Chrysler & Honda of Bemidji":199,"Ben Clymer's The Body Shop":67,"Benitez Auto Group":453,"Bentley Jacksonville":222,"Bergstrom Automotive":16025,"Best Deal Auto Sales, INC.":1707,"Beverly Hills Auto Group":335,"Big Valley Ford":203,"Bilar99e Oy":365,"Bill Cole AutoMall Bluefield":993,"Bill Dickason Chevrolet":199,"Bilmaklaren":76,"Blasius Buick GMC":793,"Blasius Kia":90,"Blasius North":396,"Blasius South":519,"Boardman Subaru and Imports":1504,"Bob Allen Ford- Ottawa":819,"Bob Johnson Automotive Group":8783,"Bob King":2600,"Bob Moore Volkswagen":265,"Bosstown Motors":28,"Brandon Steven Motors":417,"Bravo Automotive Group, LLC":3595,"Bravo Autos":645,"Bridgeton Auto Mall":580,"Brothers Auto Group":69,"Buckhannon Toyota":38,"Buckingham Hyundai":186,"Buy4Drive_Annually":25,"C.A. Larsen Automobiler A/S":336,"C360 - Sotileza":320,"C360-Mutua Alhambra":180,"C360_Safety Car":285,"CARS24 Services Private Limited":171,"CUBRAIN DESIGN STUDIO S.R.L.":57,"Calgary Truck":200,"Capital Chevrolet Inc.":5089,"Capital City Auto":46,"Capital City Ford Lincoln Toyota":63,"Capitol Auto of Smithfield":234,"Car Bargain":95,"Car Bazaar":52,"Car Capital LTD":235,"Car Castle":380,"Car Central":815,"Car Central Inc.":445,"Car City INC":352,"Car Hop Auto Sales & Finance":6300,"CaricarzSdnBhd":357,"Carify Auto Corp":106,"Carlot Hawaii":274,"Carove Automoviles":48,"Carsa":9665,"Carz.je":37,"Certified Autoplex Inc.":1978,"Charlie Clark Hyundai":3032,"Chevy Chase Acura":467,"Chip Tuning Finland Oy (Autolux)":291,"Clarvio":172,"Clear Auto Dartmouth":97,"Clear Car Group LTD":56,"Colonial Cadillac of Woburn":230,"Columbus Motorcars LLC DBA - Great Lakes Hyundai o":70,"Common Merchandising - live":782,"Community Ford of Mooresville":381,"Community Motors":273,"Cornhusker Auto Center":2589,"Countryside Mitsubishi":728,"County Ford":1118,"Courtesy Chevrolet Center San Diego":677,"Covert Auto Group":3440,"Covert Ford Lincoln":668,"Curry Acura":288,"Curry Chevrolet":324,"DIOGO MANUEL DA COSTA SANTOS UNIPESSOAL LDA":106,"DRC Auto Sales":346,"DRIVE MOTOR GROUP SA":117,"Dave Knapp Ford Lincoln":88,"Dave Syverson Auto Center":122,"Davidson Auto Group":2280,"Dealer Specialties, LLC":34642,"DealerVision.com":33090,"Dean Carter Chevrolet":780,"Deery Brothers Ford":742,"Denver Auto":43,"Dick Dyer & Associates":742,"Diffee Ford Lincoln":346,"Dimmitt Automotive Group":7112,"Direct Auto":399,"Direct Auto Sales":114,"Dirosan":569,"Dorsett Automotive":3376,"Dream Automotive":501,"Dubizzle Cars L.L.C":1507,"Duffys Auto":354,"EDealer Inc.":11305,"EV Car Company":137,"EWIGO Saint-Maur-des-Foss\u00e9s":175,"Eagle Ridge Chevrolet Buick GMC":81,"Eastern Digital":26,"Eddie Gilstrap Motors":324,"Elite Auto Marketing Solutions":3476,"Emerald Chevrolet":295,"Emerald Motors":2666,"Energy Motors Limited":20,"Enkae Prestige Motors Ltd":222,"Enterprise Motor Group":145,"Envision Management Group":177,"Etel\u00e4n Autoliike Oy (ltd.)":290,"Euro Motorcars":743,"Event Motoring":90,"Falk Hjort Biler ApS":32,"Faricy Ford":123,"Fast Energy Group":41,"Fenice Multimarcas Comercio de Veiculos LTDA":32,"Ferris Chevrolet, Inc":533,"Financia Motors":71,"Fine Cars (Lee on Solent) Ltd":28,"Flexcar":2172,"Flexicar":23120,"Flood Auto Group":328,"Flood Mazda":313,"Fornova, Com\u00e9rcio e Assist\u00eancia de  Ve\u00edculos Lda":105,"Forrester Lincoln":518,"Foto-Ops":45795,"Freedom Chevrolet":308,"G Town Motors":132,"GETCAR LLC":381,"GOPACARS AUTOMOVILES SL":136,"Galleria BMW":1303,"Gaye Chevrolet":39,"Gedi Route Cars Inc.":594,"Gene Langley Ford":163,"Generation Nissan":537,"Georgia Auto World":757,"Germain of Beavercreek I, LLC dba Germain Ford of ":3993,"Gettel Automotive Group":38509,"Ghost Auto Werkz":36,"Glass Capital CDJR":52,"Globe Automotive":759,"GoldBoyz Auto Sales":433,"Golden Mile Chrysler Dodge Jeep Ram":158,"Graff Chevrolet of Chesterton":5059,"Grand motors Inc O/A oscars motors":66,"Great Lakes Auto Group":3215,"Greater Chicago Motors":289,"Greenville Automotive Group":272,"Greenway Automotive Group":21766,"Groton Ford":92,"Gwatney Buick GMC":1037,"H&K Chevrolet Family Auto":1079,"HASANAH GROUP (PTY) LTD":70,"Haldeman Lexus of Princeton":475,"Haley Automotive Group":615,"Harper Chevrolet GMC":30,"Harvest Auto Family":490,"Hawthorne Auto Square":1316,"Hershey Motors":71,"Hewlett Volkswagen, LP":931,"Highline Motors Cars Corp":918,"Homan Auto Sales Inc":645,"Hondru Auto Group(US)":381,"House Chevrolet Co.":885,"Husker Chevrolet":1064,"H\u00e9lder Campos Unipessoal Lda":20,"ICL Autos":2663,"IM Marketplace GmBH":81396,"IMPOSTA MON. IKE":85,"INERCIKAR SA":3242,"Icon Motors Group of Framingham":142,"Ideal Cars":6060,"Ideal Centre Ltd T/A Ideal Car Centre":238,"Impex Auto Sales":2678,"Island Auto Sales":270,"J & A Ferguson Cars":36,"JDBNOW":146,"JDMotorline LTD":309,"JMB Auto Sports":42,"Jaidah Motors and Trading Company":35,"Jan Auto Sales LLC":79,"Janssen Auto Group":109,"Janssen Chrysler Jeep Dodge":392,"Janssen Kool Honda":121,"Janssen Kuenle CDJR":3387,"Jeff Kies Auto Sales":497,"Jenkins Auto Group":23562,"Jerry Spady Chevrolet GMC Corvette Hummer":25,"Jidd Motors Mitsubishi":1113,"Jim O\u2019Connor Select Auto":94,"Jim Schmidt Automotive":2697,"John Andrew Used Cars":58,"Joseph Toyota Of Cincinnati":927,"Joshua Trownsell":710,"Juettner Motors Inc.":246,"K&f Auto Sales And Service":40,"KL Honda":21,"Karakas Auto":90,"Kazoto SARL":88,"Keffer Inc.":4587,"Kempton Chevrolet":90,"Key West Ford Sales Ltd":393,"Kia Cold Lake":48,"Kia Vancouver":735,"Kian Motors INC":1295,"Kimberly BMW":60,"Knapp Chevrolet, Inc.":665,"Kolon Mobility Group":726,"Korf Motors":4690,"L&Z Trades Company Limited":34,"LES PRESTATIONS DE L'AUTO":72,"LUXIRIDE AUTOS":489,"LUXURY IMPORTS":1727,"Lamacchia Honda":221,"Lambert Buick GMC Inc":1992,"Landers Dodge Chrysler Jeep RAM":943,"Laramie Peak Motors LLC":191,"Lee Group":1244,"Lewis Auto Group":1341,"Lewiston Auto":1217,"Lexus Of Orland":229,"Lexus of Lehigh Valley":634,"Lexus of Merrillville":247,"Lindholm Biler A/S":52,"Lockwood Motors, Inc.":686,"Long Automotive Group":156,"Long Island Sports Cars":64,"Loyalty Chevrolet/Cadillac":50,"Loyalty Nissan of Red Pump":389,"Loyalty Toyota":777,"Loyalty Used Car Supercenter":140,"Loyalty Volkswagen":46,"Luxury Auto Plex":31,"LuxuryMotorCars":1230,"MAG CHRYSLER DODGE JEEP RAM":680,"MAG Rotherham Ltd.":7448,"MB Motors":7287,"MEI Inc":1158,"MOJSIUK Sp":68,"MP auto Sales LLC DBA Carizona":1369,"MY NAGHI":509,"Magnum Car Sales":162,"Main Street Motors":80,"Marano & Sons Auto Sales":457,"Marthaler Honda":412,"Marthaler Honda of Ashland":164,"McCurley Dealerships":1899,"McGrath Acura of Westmont (Mcgrath Imports)":738,"Mccurley Subaru Of Yakima":716,"Medgaarden's Southwest Sales Inc":51,"Median Media LLC":2839,"Mega Dealer":4117,"Megasell Auto Group":43,"Mercedes-Benz Of Columbus":909,"Mercedes-Benz of Portsmouth":110,"Meyer Imports DBA Berwyn Kia":332,"Miami Acura":341,"Midway Dodge":457,"Modern Classic Motors INC":980,"Moffitt's Ford":461,"Mondial car Sarl":175,"Montgomery Moore":1174,"Moore Motor Sales":330,"Moses Auto Group":2849,"Mossy Motors":383,"Moto Pfohe EOOD":83,"Motorland":60,"Motorline Auto Group":45,"Motorpedia365 Revolution Private Limited":30,"Mount Airy Nissan":379,"Mt Orab Chevy":1526,"Muelas SA":25,"NJ Auto Haus":310,"NOVA AUTOMOBILE":324,"NZC Auckland":63,"National Auto Trust Company":722,"Nelson Automotive Inc":188,"NetLook, Inc":150,"Netlook Prod All Image ":2431,"Netlook Prod Exterior only ":103347,"New Deal Pre-Owned Autos":1288,"Njord ApS":268,"Noblesville Imports":338,"Northgate Auto company LLC":35,"Northpoint Toyota _ Australia":40,"Northstar Kia":677,"Northwest Indiana Auto Finance":261,"Novacti":854,"ONE STOP MOTORS MMB LTD":480,"Ohio Specialty Services, LTD.":133,"Olson Chevrolet":6813,"Olympic Hyundai Vancouver":77,"Omnetic":909,"Orangeville Hyundai":69,"PYK Cars Center Co. Ltd":251,"Paragon Motors of Woodside Inc dba Paragon Honda":2994,"Park Cities Chrysler Dodge Jeep Ram Fiat & Bishop ":1394,"Parks Chevrolet Richmond":577,"Pdx Wheels, Steals & Deals":324,"Pearl Chrysler Jeep Dodge & Ram":237,"Peragnoli Auto S.R.L":92,"Perfection Auto Detailing & Wheels":35,"Performance Auto Group":1947,"Performance Automotive Network":3292,"Perkins Motors":1247,"Petersen CDJR":220,"Phelps Chevrolet":60,"Photo Pixel":65,"Piryani Pty Ltd TA Galaxy Autos":32,"Pixel Cars":249,"Planet Honda, Planet Hyundai, Leo Payne Honda & Ge":1896,"Platinum Cars":601,"Pointe Buick Gmc":162,"Porsche Inter Auto BG EOOD":90,"Portsmouth Ford Lincoln":2203,"Post Oak Toyota":1665,"Prestige Auto Sales":268,"Preston Motor Automotive Group":5167,"Princeton Chevrolet GMC":370,"Pritchard Companies":2326,"Puente Hills Mitsubishi":326,"QA Imports Pty Ltd":28,"Qatar Living":293,"Quality Cars Zaventem":89,"Quantrell Auto Group":620,"Quebec Inc.":35,"ROCHESTER VOLKSWAGEN":103,"Rainbow Motor Sales":50,"Raleigh Imports":142,"Ramsey Motor Company":178,"Ramstien Used Cars":1029,"Rawian Oy":12930,"Reliance Motor Group LLC":199,"Renny Bettan":164,"Richard lawson autoecosse":154,"RideLine":34,"Rideau Valley Motors":210,"Right Move Auto Sales (GBP)":32,"Riley Subaru":648,"Rn3 Automobiles":145,"Roanoke Motors Inc":214,"Robert street auto sales":260,"Rochester Toyota":165,"Rohrich Automotive Group":1558,"Rolls-Royce Motor Cars Raleigh":263,"Rons Automotive/Carzlane Inc":572,"Royalty Autohaus ":63,"Runde Chevrolet, Inc.":816,"Rusnak Auto Group - Mercedes- Benz of Arcadia":503,"Russ Darrow Group, Inc.":5091,"Russo Auto Sales":26,"Ryan Buick GMC Cadillac":6716,"S A C USED CAR TRADING L.L.C":1698,"S&L Motors, Pulaski WI":144,"S&S Motors":356,"SAARRTH PEHLIGAADI PRIVATE LIMITED":95,"SAN DIEGO ECARS":109,"SAS SELLIT":124,"SI Vallett Auto Sales":335,"SLEEK CARS LIMITED":31,"Safy Auto Sales":122,"Saga Motor Group":20,"Sakura Motors London LTD":326,"Sansone Jr's Auto Group":1285,"Santa Motors CA":145,"Scotland Motors, Inc.":46,"Seattle Jeep":101,"Sell Em All Motors":907,"Servicars srl":159,"Sewell Family of Companies":2742,"Shawnee Mission Ford":166,"Shelly Motors Ltd":205,"Sherwood Ford":2635,"Silsbee Ford":55,"Silverline Auto Group":82,"Simmons-Rockwell Automotive Dealerships":1242,"Sithari Cars Limited":333,"Smartlot All image set":752,"Smartlot Solutions":1829,"Soave Automotive Group":1264,"Sound auto and finance":110,"Southern Ford of Thomaston":76,"Southey Ford":117,"Spangler Subaru":42,"Speck Dealerships":3070,"Speedway Car Sales":2576,"Sport Car srl":24,"Springfield Luxury Automall":914,"Spyne":29,"Star Motors":395,"Starling Auto Group":4942,"Starling Chevrolet":4283,"Startin Group":2802,"Sterling Acura of Austin":281,"Strategic Vehicle Solutions":328,"Street Automotive SL":119,"Street Toyota":500,"Subaru Calgary":170,"Subaru of Cherry Hill LLC":196,"Subaru of Columbia (CMSUB, LLC)":396,"Subaru of Wesley Chapel":2096,"Sunny and 70 Auto Sales, LLC":71,"Superb Auto Sales":25,"Superior Auto, INC":651,"Swiss Cargate GmbH":22,"Szilagyi Gabriella":404,"S\u00f8rby Autocenter":22,"TNS Autosports":349,"TORSVIKS BIL AB":136,"TVS CERTIFIED PRIVATE LIMITED":1964,"TX Auto Group":160,"Tauke Motors Incorporated":421,"Taylor BMW":405,"Team Nissan Inc":253,"Teton solutions Group":6370,"The Ford Store Morgan Hill":274,"The Garage":385,"The Used Car Guys GMBH":527,"Think Reliable Auto":347,"Tolj automobili d.o.o":49,"Toronto Honda":7496,"Towne Ford Inc":547,"Toyota Of Wallingford":846,"Toyota of Massapequa":164,"Trevinos Auto Mart ltd":112,"Tri County Ford":489,"Tropical Used Cars":988,"Tru West Auto":124,"Turpin Dodge Chrysler Jeep Ram":224,"Twin Rivers Auto Group":193,"UNIDAS LOCADORA S.A.":4371,"United Motorz Inc":225,"VW of Duluth":324,"Van Horn Automotive Group":13511,"Van Mossel":961,"Vatland Auto Group":2657,"Vayper Automoci\u00f3n S.L.U":22,"Vehixpro":307,"Velocity Automotive Inc":60,"Victory Automotive Group":4927,"Victory Motors - Chesterfield":141,"Vincue-Prod":3656,"Vindevers Autohaus of Sylvania":604,"Vivition":276,"Volkswagen of Wesley Chapel":869,"Volvo Cars Fort Washington":195,"Volvo Cars Palm Springs":21,"Volvo of Princeton Inc":694,"V\u00c4RNAMO BILAFF\u00c4R AB":42,"Waco Hyundai":227,"Walker Jones Chevrolet":1694,"Wallingford Auto Park, Inc.":90,"Walt Massey Chrysler Dodge Jeep Ram Fiat":4201,"Watermark Ford Hyundai":1536,"West Mitsubishi":75,"White Bear Lincoln":162,"Whitewater Motors Incorporated":254,"Willowbrook Ford & Kia":431,"Wiz Leasing Inc":696,"Wood Motor Company":3537,"World Car Auto Group":10776,"Worldwide Motors LTD dba Paragon Acura":983,"XYZ Motors":114,"Yemm Auto":913,"Yoder Family of Companies":942,"Yoga Cars":569,"Yokem Motors LLC DBA Yokem Toyota":115,"Yonkers Auto Gallery, LLC":427,"Your Choice Auto LLC":2332,"ZT Automotive":750,"Zara Auto Sales Inc":703,"Zeigler Hyundai of Racine":1518,"Zim's Auto Sales & Services Inc":160,"Zink Motor Company":349,"c360-autosa":48,"c360-bmw":1115,"c360-canaauto":181,"c360-fecosauto":169,"c360-grupmibec":116,"c360-gyata":28,"c360-muy cars":761,"c360-ocasionplus":9276,"c360-torresdreamcars":197,"c360-vians":349,"carizy_1":4524,"carmedia prod":2329,"cars24- new project":57,"carvago test account":89,"carvago2":6252,"common merchandising":2939,"dealcar_v2":2042,"dealer speciality 360":13759,"dimmitt automotive-bentley tampa bay":95,"ds trial":116,"flexi car green":34,"greenway auto group 2":3562,"jr motors megadealers":30,"mclarty auto group (ams)":4274,"mears auto group":1300,"ml autos":43,"mp-auto-trgovina":41,"nada - 1":314,"nada - 2":282,"neelima motors":8203,"orr chevy cadillac":400,"orr nissan (ams)":200,"spyne flip":1941,"toronto best auto":26},"url_ent_counts":{"008bd89e8":40,"00d2aafe9":200,"00e6652a1":12,"038268a7d":5,"041b66a4f":14,"05c8dbbe2":7,"07dda277e":90,"0933d658a":143,"0980fbfb5":5,"0b430981d":9,"0c4830006":6,"0c519f5f2":10,"0d1f288be":9,"0eee6a3c0":9,"10068fb52":5,"10bb841f8":444,"1145eab0b":7,"11c8ecc4b":9,"124028d6b":7,"1291a4fc6":52,"12dd17590":50,"13-11-1447":7,"135be0327":97,"1713df08e":26,"1953dbe6b":51,"1O103VCUW":770,"1f3dcfbe3":15,"1f58a4527":8,"2025-06-03":12,"2025-06-04":21,"2025-06-05":6,"2025-06-06":12,"2025-06-07":20,"2025-06-09":11,"2025-06-12":7,"2025-06-13":10,"2025-06-18":9,"2025-06-19":34,"2025-06-20":14,"2025-06-25":17,"2025-06-26":14,"2025-07-10":6,"2025-07-17":8,"2025-07-23":7,"2025-07-31":23,"2025-08-07":33,"2025-08-13":13,"2025-08-15":8,"2025-08-20":6,"2025-08-27":6,"2025-09-01":5,"2025-09-03":6,"2025-09-09":13,"2025-09-26":7,"2025-09-27":9,"2025-10-04":6,"2025-10-13":5,"2025-10-16":5,"2025-10-17":17,"2025-10-21":7,"2025-10-22":11,"2025-10-29":16,"2025-10-30":322,"2025-10-31":29,"2025-11-04":21,"2025-11-05":8,"2025-11-06":5,"2025-11-09":6,"2025-11-10":7,"2025-11-12":8,"2025-11-14":19,"2025-11-20":46,"2025-11-21":9,"2025-11-24":28,"2025-11-28":7,"2025-11-30":5,"2025-12-01":10,"2025-12-02":393,"2025-12-03":17,"2025-12-04":18,"2025-12-05":9,"2025-12-06":32,"2025-12-09":23,"2025-12-11":19,"2025-12-12":172,"2025-12-13":26,"2025-12-14":7,"2025-12-16":12,"2025-12-17":17,"2025-12-20":26,"2025-12-21":8,"2025-12-25":6,"2025-12-26":15,"2026-01-01":5,"2026-01-03":14,"2026-01-05":56,"2026-01-08":27,"2026-01-09":21,"2026-01-13":23,"2026-01-15":13,"2026-01-16":14,"2026-01-17":28,"2026-01-19":120,"2026-01-20":176,"2026-01-22":17,"2026-01-27":5,"2026-01-28":28,"2026-01-29":33,"2026-01-30":50,"2026-01-31":13,"2026-02-01":19,"2026-02-03":148,"2026-02-04":14,"2026-02-06":5,"2026-02-07":12,"2026-02-09":26,"2026-02-10":15,"2026-02-11":6,"2026-02-12":67,"2026-02-13":52,"2026-02-14":19,"2026-02-15":10,"2026-02-16":23,"2026-02-17":18,"2026-02-18":51,"2026-02-19":124,"2026-02-20":63,"2026-02-21":54,"2026-02-23":51,"2026-02-24":27,"2026-02-25":60,"2026-02-26":24,"2026-02-27":185,"2026-02-28":43,"2026-03-01":77,"2026-03-02":29,"2026-03-03":188,"2026-03-04":200,"2026-03-05":40,"2026-03-06":44,"2026-03-07":42,"2026-03-08":13,"2026-03-09":56,"2026-03-10":370,"2026-03-11":314,"2026-03-12":190,"2026-03-13":77,"2026-03-14":215,"2026-03-15":18,"2026-03-16":180,"2026-03-17":765,"2026-03-18":54,"2026-03-19":95,"2026-03-20":948,"2026-03-21":64,"2026-03-22":16,"2026-03-23":243,"2026-03-24":87,"2026-03-25":388,"2026-03-26":513,"2026-03-27":128,"2026-03-28":114,"2026-03-29":8,"2026-03-30":60,"2026-03-31":90,"2026-04-01":167,"2026-04-02":102,"2026-04-03":552,"2026-04-04":232,"2026-04-05":85,"2026-04-06":432,"2026-04-07":237,"2026-04-08":279,"2026-04-09":466,"2026-04-10":281,"2026-04-11":132,"2026-04-12":110,"2026-04-13":250,"2026-04-14":638,"2026-04-15":197,"2026-04-16":543,"2026-04-17":1090,"2026-04-18":218,"2026-04-19":122,"2026-04-20":475,"2026-04-21":727,"2026-04-22":344,"2026-04-23":2249,"2026-04-24":1540,"2026-04-25":1396,"2026-04-26":706,"2026-04-27":210112,"2026-04-28":245826,"2026-04-29":250471,"2026-04-30":255952,"2026-05-01":17947,"2026-05-02":2084,"2026-05-03":153,"2026-05-04":2116,"2026-05-05":1494,"2026-05-06":1208,"2026-05-07":855,"2026-05-08":3603,"2026-05-09":598,"2026-05-10":45,"2026-05-11":3220,"2026-05-12":849,"2026-05-13":2430,"2026-05-14":695,"2026-05-15":1045,"2026-05-16":108,"2026-05-18":1605,"2026-05-19":232,"20bde9997":31,"21de286e9":44,"22af275f9":22,"24e5c9f25":6,"257cc21aa":7,"2626fb4ab":10,"266afc91d":6,"271f77862":16,"28-04-2026":8,"285e87825":5,"29-04-2026":5,"2affb0f18":9,"2b86e64ed":18,"2b8948cea":37,"2b97abb6f":7,"2bcab8871":5,"2bee617cb":10,"2c96bae5e":11,"2d410b1b9":38,"2e3642c1f":8,"2f39623ab":46,"30-04-2026":12,"32aa2472d":11,"32edbe021":5,"33b28d1f4":11,"3594c01ab":15,"36b12b7fb":6,"3756e853d":20,"3bcb3b851":31,"3c04c87a2":23,"3eb8f259d":20,"3f55cc067":7,"411229b38":8,"414beed75":7,"442e5dc24":8,"464341d89":8,"481280154":17,"48d291b7d":35,"49c19efb3":33,"4a9553ec1":14,"4b8b865fd":8,"4beaa71ca":43,"4f772edd8":89,"4fefabd10":9,"5050e8479":18,"51f47b569":15,"5292dd88c":236,"568f9632d":75,"58b2e7e60":12,"58e0896f7":5,"58edc61c0":6,"59545e255":5,"5a1a55a03":17,"5a3805c98":15,"5aae59ef8":26,"5ab683aff":10,"5cc357db7":17,"5d9811ccd":8,"5e8a22e2a":12,"5f1f58407":6,"5fd31e3bc":16,"6104feedc":9,"61c968504":15,"62b56bdae":16,"640edb0f7":67,"6454b95ba":979,"6460d434f":38,"65027084d":8,"652ef9315":32,"65bb3c871":14,"65c4c0ee4":7,"65c97c6aa":46,"65ebbb271":26,"673fce097":16,"67b1565d7":61,"68cc99693":18,"68fe4f5eb":91,"6a10d4a7d":17,"6add25efd":17,"6b212a82f":51,"6d7a9d414":7,"6f158bbb9":9,"716d304ef":6,"737a78084":16,"79faced13":11,"7a0316bc8":31,"7a2bacfec":15,"7d06f7427":8,"8029ea3a5":8,"81d94123f":10,"82255fce5":35,"838db311d":6,"83b02cc1c":11,"844554576":25,"85b35506d":20,"87afb1c14":21,"87b2e0c86":11,"88b67d13e":9,"8bbc0dce6":10,"8e01fd835":122,"8e2f0d75a":22,"8eafe01f6":7,"9016eb535":19,"90410e297":62,"927d8b415":37,"927f9af2f":14,"9360a5821":6,"93b8cc9c8":9,"93f92de4e":5,"9489ec587":10,"94fc0aa70":5,"9677b7758":7,"96d596c79":31,"970376e28":18,"9760K371U":264,"99c36f997":13,"9aaa4f1f4":20,"9bb0e68c6":12,"9cafef7cb":15,"9d7892a1e":63,"9f9d43dd0":15,"AI":10554,"InventoryImages":18,"Processed":6,"QJC7Y1H68":336,"a08cdd6df":9,"a2941db1d":46,"a45469aae":65,"a4e592040":21,"a5c8cdf57":23,"ab71c1f45":13,"acd986f51":17,"ad2559dcd":8,"aef07d3d0":8,"b047d91bc":14,"b0cf1df81":24,"b3b685b8c":5,"b4745ec79":11,"b542e23cc":10,"b733cdf5d":115,"b81a8498a":16,"b9949e885":36,"b9ef6e63e":125,"bafd919bb":5,"bb1d04fd0":40,"bb63009cf":38,"bd0d02ef3":6,"be8c747b2":13,"c2df3101d":30,"c95e31793":16,"c9ad8d13f":7,"cdca96e86":31,"cdcfb6158":24,"cdea95437":7,"ce93dfe80":10,"cecef60ce":41,"cfa16f31b":5,"d058bfeb5":5,"d05d096b7":15,"d1319edae":8,"d45432dcd":16,"d4aac809f":44,"d71edc99b":6,"d8dd768a0":10,"d94a891e5":16,"d9e6f6263":35,"e2394e4d7":17,"e258a7579":12,"e2ea1524e":8,"e73a02036":7,"e7c70ee5c":105,"e80cf936b":59,"e91b8a8fe":15,"eaab7f702":20,"eb4f0c7af":12,"ebc6eda0a":7,"ec7fa01a5":8,"ef09d889d":23,"efd988503":25,"f01410f91":5,"f0a3aeb41":9,"f2c1c3e12":49,"f37e2e818":12,"f41cf9b81":5,"f4c604f67":38,"f55c43f3a":10,"f5d12670d":47,"f88f486fb":7,"f8c8d9175":89,"f95f2d883":6,"f968f02c4":8,"fa07d6b63":13,"fb11e671a":27,"fcc547850":120,"fdfde0db4":16,"ffc453a6b":46,"image":29,"raw-car-images":7,"resize":5,"uploads":186}};
 
-const SAMPLES = [
-  {label: "Pass-likely (spyne-media)", url: "https://spyne-media.s3.amazonaws.com/2026-04-30/car_replace_bg_1dc321cf-4ccd-4723-9c7e-4abac8354c20.png"},
-  {label: "Fail-likely (desktop-app)", url: "https://spyne-desktop-app.s3.amazonaws.com/8e01fd835/abc/1777606480549/desktop_editor/d/img-c7f864ac.jpeg"},
-  {label: "Unknown domain", url: "https://example-cdn.com/some-image.jpg"},
+const SAMPLES = {
+  pass: "https://spyne-media.s3.amazonaws.com/2026-04-30/car_replace_bg_1dc321cf-4ccd-4723-9c7e-4abac8354c20.png",
+  fail: "https://spyne-desktop-app.s3.amazonaws.com/8e01fd835/abc/1777606480549/desktop_editor/d/img-c7f864ac.jpeg",
+  unknown: "https://example-cdn.com/some-random-image.jpg"
+};
+
+const BATCH_SAMPLES = [
+  "https://spyne-media.s3.amazonaws.com/2026-04-30/car_replace_bg_1dc321cf-4ccd-4723-9c7e-4abac8354c20.png",
+  "https://spyne-media.s3.amazonaws.com/2026-04-29/car_replace_bg_aaa.png",
+  "https://spyne-desktop-app.s3.amazonaws.com/6454b95ba/abc/177760/desktop_editor/d/img-1.jpeg",
+  "https://spyne-desktop-app.s3.amazonaws.com/8e01fd835/def/177760/desktop_editor/d/img-2.jpeg",
+  "https://spyne-desktop-app.s3.amazonaws.com/uploads/9999/img-3.jpg",
+  "https://spyne-prod-tech.s3.amazonaws.com/path/img-4.png",
+  "https://random-domain.example.com/some-image.jpg",
+  "https://spyne-media.s3.amazonaws.com/2026-04-28/car_replace_bg_xyz.png"
 ];
 
+const HISTORY_KEY = 'autoqc_history_v1';
+const MAX_HISTORY = 50;
+
+/* ============ PARSING + PREDICTION ============ */
 function parseUrl(u) {
   try {
     const url = new URL(u);
     const segs = url.pathname.replace(/^\/+|\/+$/g, '').split('/');
     const extMatch = url.pathname.match(/\.([a-zA-Z0-9]+)$/);
-    const ext = extMatch ? extMatch[1].toLowerCase() : '';
     return {
       ok: true,
       domain: url.hostname,
       urlEntId: segs[0] || '',
       hasCarReplaceBg: u.includes('car_replace_bg'),
-      ext: ext,
+      ext: extMatch ? extMatch[1].toLowerCase() : ''
     };
-  } catch (e) {
-    return { ok: false };
-  }
+  } catch { return { ok: false }; }
 }
 
-function logOdds(p) {
-  const eps = 1e-6;
-  return Math.log((p + eps) / (1 - p + eps));
-}
-function sigmoid(x) {
-  return 1 / (1 + Math.exp(-x));
-}
+function logOdds(p) { const eps = 1e-6; return Math.log((p + eps) / (1 - p + eps)); }
+function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 
-function predictFromFeatures(f, category, enterprise) {
-  const factors = [];
-  const rates = [];
-  const weights = [];
+function predict(parsedUrl, category, enterprise) {
+  const f = parsedUrl;
+  const factors = []; const rates = []; const weights = [];
+  let hasKnownDomain = false;
 
-  // Domain
   if (f.domain && MODEL.domain[f.domain] !== undefined) {
-    const r = MODEL.domain[f.domain];
-    const n = MODEL.domain_counts[f.domain];
-    factors.push({key: 'Domain', val: f.domain, rate: r, n: n});
+    const r = MODEL.domain[f.domain]; const n = MODEL.domain_counts[f.domain];
+    factors.push({key: 'Domain', val: f.domain, rate: r, n});
     rates.push(r); weights.push(3.0);
+    hasKnownDomain = true;
   } else if (f.domain) {
-    factors.push({key: 'Domain', val: f.domain + ' (not in data)', rate: MODEL.base_rate, n: 0});
+    factors.push({key: 'Domain', val: f.domain + ' (unseen)', rate: MODEL.base_rate, n: 0});
     rates.push(MODEL.base_rate); weights.push(0.5);
   }
-
-  // URL enterprise id (path[0])
   if (f.urlEntId && MODEL.url_ent_id[f.urlEntId] !== undefined) {
-    const r = MODEL.url_ent_id[f.urlEntId];
-    const n = MODEL.url_ent_counts[f.urlEntId];
-    factors.push({key: 'URL path id', val: f.urlEntId, rate: r, n: n});
+    const r = MODEL.url_ent_id[f.urlEntId]; const n = MODEL.url_ent_counts[f.urlEntId];
+    factors.push({key: 'URL path id', val: f.urlEntId, rate: r, n});
     rates.push(r); weights.push(2.5);
   }
-
-  // car_replace_bg pattern
   const crbR = f.hasCarReplaceBg ? MODEL.crb_with : MODEL.crb_without;
-  factors.push({key: 'car_replace_bg', val: f.hasCarReplaceBg ? 'present' : 'absent', rate: crbR, n: null});
+  factors.push({key: 'car_replace_bg', val: f.hasCarReplaceBg ? 'present in URL' : 'absent', rate: crbR, n: null});
   rates.push(crbR); weights.push(1.0);
-
-  // Extension
   if (f.ext && MODEL.ext[f.ext] !== undefined) {
-    const r = MODEL.ext[f.ext];
-    factors.push({key: 'Extension', val: '.' + f.ext, rate: r, n: null});
-    rates.push(r); weights.push(0.5);
+    factors.push({key: 'Extension', val: '.' + f.ext, rate: MODEL.ext[f.ext], n: null});
+    rates.push(MODEL.ext[f.ext]); weights.push(0.5);
   }
-
-  // Category (user-provided)
   if (category && MODEL.category[category] !== undefined) {
-    const r = MODEL.category[category];
-    factors.push({key: 'Category', val: category, rate: r, n: null});
-    rates.push(r); weights.push(1.5);
+    factors.push({key: 'Category', val: category, rate: MODEL.category[category], n: null});
+    rates.push(MODEL.category[category]); weights.push(1.5);
   }
-
-  // Enterprise (user-provided)
   if (enterprise && MODEL.enterprise[enterprise] !== undefined) {
-    const r = MODEL.enterprise[enterprise];
-    factors.push({key: 'Enterprise', val: enterprise, rate: r, n: null});
-    rates.push(r); weights.push(2.0);
+    factors.push({key: 'Enterprise', val: enterprise, rate: MODEL.enterprise[enterprise], n: null});
+    rates.push(MODEL.enterprise[enterprise]); weights.push(2.0);
   }
 
-  // Weighted log-odds average
-  let probFail;
-  if (rates.length === 0) {
-    probFail = MODEL.base_rate;
-  } else {
+  let probFail = MODEL.base_rate;
+  if (rates.length) {
     let num = 0, den = 0;
-    for (let i = 0; i < rates.length; i++) {
-      num += logOdds(rates[i]) * weights[i];
-      den += weights[i];
-    }
+    for (let i = 0; i < rates.length; i++) { num += logOdds(rates[i]) * weights[i]; den += weights[i]; }
     probFail = sigmoid(num / den);
   }
-  return { probFail, factors };
+  return { probFail, factors, hasKnownDomain };
 }
 
-function rateClass(r) {
-  if (r < 0.02) return 'lo';
-  if (r > 0.15) return 'hi';
-  return 'mid';
+function rateClass(r) { if (r < 0.02) return 'lo'; if (r > 0.15) return 'hi'; return 'mid'; }
+
+function getVerdict(probFail, hasKnownDomain, threshold) {
+  if (!hasKnownDomain) return { label: 'Unknown', class: 'warn', cls: 'warn' };
+  if (probFail >= threshold) return { label: 'Likely Fail', class: 'fail', cls: 'fail' };
+  if (probFail >= threshold * 0.5) return { label: 'Borderline', class: 'warn', cls: 'warn' };
+  return { label: 'Likely Pass', class: 'pass', cls: 'pass' };
 }
 
-function renderResult(probFail, factors, hasKnownDomain) {
-  const pct = (probFail * 100);
-  let verdict, badgeClass;
-  if (!hasKnownDomain) {
-    verdict = 'Unknown';
-    badgeClass = 'unknown';
-  } else if (probFail >= 0.15) {
-    verdict = 'Likely Fail';
-    badgeClass = 'fail';
-  } else if (probFail >= 0.03) {
-    verdict = 'Borderline';
-    badgeClass = 'unknown';
-  } else {
-    verdict = 'Likely Pass';
-    badgeClass = 'pass';
-  }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  const passPct = (100 - pct);
-  const barClass = badgeClass;
-  const barWidth = badgeClass === 'pass' ? passPct : (badgeClass === 'fail' ? pct : 50);
+/* ============ SINGLE RENDER ============ */
+let currentResult = null;
+let currentThreshold = 0.15;
 
-  const factorsHtml = factors.map(f => {
+function renderSingle(url, parsed, result) {
+  currentResult = { url, parsed, result };
+  const wrap = document.getElementById('qc-result-wrap');
+  wrap.innerHTML = `
+    <div class="result-grid">
+      <div class="result-main">
+        <div class="verdict">
+          <div class="verdict-left">
+            <div class="verdict-icon" id="v-icon">—</div>
+            <div>
+              <div class="verdict-label">Verdict</div>
+              <div class="verdict-text" id="v-text">—</div>
+            </div>
+          </div>
+          <div class="verdict-right">
+            <div class="conf-num" id="v-conf">—</div>
+            <div class="conf-label">Pass confidence</div>
+          </div>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" id="v-bar"></div>
+        </div>
+        <div class="threshold-block">
+          <div class="factors-head" style="margin-top: 16px;">
+            <span class="factors-title">Fail threshold</span>
+            <span class="factors-hint">predictions above this are called Fail</span>
+          </div>
+          <div class="threshold-row">
+            <input type="range" id="threshold-slider" min="0.01" max="0.5" step="0.01" value="${currentThreshold}" />
+            <div class="threshold-val" id="threshold-val">${(currentThreshold*100).toFixed(0)}%</div>
+          </div>
+        </div>
+        <div class="factors-head">
+          <span class="factors-title">Factors used</span>
+          <span class="factors-hint">weighted log-odds average</span>
+        </div>
+        <div id="factors-body"></div>
+      </div>
+      <div class="result-side">
+        <div class="preview-title">Image preview</div>
+        <div class="preview-box" id="preview-box">
+          <div class="preview-placeholder">Loading…</div>
+        </div>
+        <div class="preview-info">
+          <div class="preview-info-row"><span class="k">Domain</span><span class="v" id="pv-domain">—</span></div>
+          <div class="preview-info-row"><span class="k">Path id</span><span class="v" id="pv-path">—</span></div>
+          <div class="preview-info-row"><span class="k">Extension</span><span class="v" id="pv-ext">—</span></div>
+        </div>
+      </div>
+    </div>`;
+  applyResult();
+  loadPreview(url);
+  document.getElementById('pv-domain').textContent = parsed.domain || '—';
+  document.getElementById('pv-path').textContent = parsed.urlEntId || '—';
+  document.getElementById('pv-ext').textContent = parsed.ext ? '.' + parsed.ext : '—';
+  document.getElementById('threshold-slider').addEventListener('input', e => {
+    currentThreshold = parseFloat(e.target.value);
+    document.getElementById('threshold-val').textContent = (currentThreshold*100).toFixed(0) + '%';
+    applyResult();
+  });
+}
+
+function applyResult() {
+  if (!currentResult) return;
+  const { probFail, factors, hasKnownDomain } = currentResult.result;
+  const v = getVerdict(probFail, hasKnownDomain, currentThreshold);
+  const passPct = (1 - probFail) * 100;
+
+  const icon = document.getElementById('v-icon');
+  icon.className = 'verdict-icon ' + v.cls;
+  icon.textContent = v.cls === 'pass' ? '✓' : v.cls === 'fail' ? '✕' : '?';
+  document.getElementById('v-text').textContent = v.label;
+
+  const conf = document.getElementById('v-conf');
+  conf.className = 'conf-num ' + v.cls;
+  conf.textContent = passPct.toFixed(1) + '%';
+
+  const bar = document.getElementById('v-bar');
+  bar.className = 'bar-fill ' + v.cls;
+  const barWidth = v.cls === 'pass' ? passPct : (v.cls === 'fail' ? probFail * 100 : 50);
+  bar.style.width = barWidth.toFixed(1) + '%';
+
+  const fb = document.getElementById('factors-body');
+  fb.innerHTML = factors.map(f => {
     const cls = rateClass(f.rate);
-    const nLabel = f.n != null ? ' (n=' + f.n.toLocaleString() + ')' : '';
-    return '<div class="qc-factor"><div class="qc-factor-key">' + f.key + '</div>' +
-      '<div class="qc-factor-val" title="' + escapeHtml(f.val + nLabel) + '">' + escapeHtml(f.val) + nLabel + '</div>' +
-      '<div class="qc-factor-rate ' + cls + '">' + (f.rate * 100).toFixed(2) + '% fail</div></div>';
+    const w = Math.max(2, Math.min(100, f.rate * 100 * 4));
+    const nLabel = f.n != null ? ` n=${f.n.toLocaleString()}` : '';
+    return `<div class="factor-row">
+      <div class="factor-key">${escapeHtml(f.key)}</div>
+      <div class="factor-val" title="${escapeHtml(f.val + nLabel)}">${escapeHtml(f.val)}${nLabel ? ` <span style="color:var(--text-dim)">${nLabel}</span>` : ''}</div>
+      <div class="factor-mini-bar"><div class="factor-mini-fill ${cls}" style="width:${w}%"></div></div>
+      <div class="factor-rate ${cls}">${(f.rate*100).toFixed(2)}%</div>
+    </div>`;
   }).join('');
-
-  const html =
-    '<div class="qc-verdict">' +
-      '<span class="qc-badge ' + badgeClass + '">' + verdict + '</span>' +
-      '<div style="margin-left:auto; text-align:right;">' +
-        '<div class="qc-conf">' + passPct.toFixed(1) + '%</div>' +
-        '<div class="qc-conf-label">predicted pass confidence</div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="qc-bar"><div class="qc-bar-fill ' + barClass + '" style="width:' + barWidth.toFixed(1) + '%"></div></div>' +
-    '<div class="qc-factors"><h3>Factors used</h3>' + factorsHtml + '</div>';
-
-  const el = document.getElementById('qc-result');
-  el.className = 'qc-result';
-  el.innerHTML = html;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function loadPreview(url) {
+  const box = document.getElementById('preview-box');
+  box.innerHTML = '<div class="preview-placeholder">Loading…</div>';
+  const img = new Image();
+  img.onload = () => { box.innerHTML = ''; box.appendChild(img); };
+  img.onerror = () => { box.innerHTML = '<div class="preview-placeholder">Could not load image<br><span style="opacity:0.6">(CORS, expired URL, or offline)</span></div>'; };
+  img.src = url;
+  img.alt = 'Preview';
+  img.referrerPolicy = 'no-referrer';
 }
 
-function qcPredict() {
+function runSingle() {
   const url = document.getElementById('qc-url').value.trim();
+  if (!url) return;
+  const parsed = parseUrl(url);
+  if (!parsed.ok) {
+    document.getElementById('qc-result-wrap').innerHTML = `<div class="result-main"><div class="empty-result"><div class="empty-result-icon">!</div>Could not parse the URL. Make sure it starts with http(s)://</div></div>`;
+    return;
+  }
   const category = document.getElementById('qc-category').value;
   const enterprise = document.getElementById('qc-enterprise').value;
-  if (!url) {
-    document.getElementById('qc-result').className = 'qc-result empty';
-    document.getElementById('qc-result').textContent = 'Paste a URL above and hit Predict.';
-    return;
-  }
-  const f = parseUrl(url);
-  if (!f.ok) {
-    document.getElementById('qc-result').className = 'qc-result empty';
-    document.getElementById('qc-result').textContent = 'Could not parse that URL — make sure it starts with http(s)://';
-    return;
-  }
-  const hasKnownDomain = MODEL.domain[f.domain] !== undefined;
-  const { probFail, factors } = predictFromFeatures(f, category, enterprise);
-  renderResult(probFail, factors, hasKnownDomain);
+  const result = predict(parsed, category, enterprise);
+  renderSingle(url, parsed, result);
+  saveHistory({ url, probFail: result.probFail, hasKnown: result.hasKnownDomain, t: Date.now() });
 }
 
+/* ============ BATCH ============ */
+let batchData = []; let batchFilter = 'all'; let batchSort = { col: 'idx', dir: 'asc' };
+
+function runBatch() {
+  const lines = document.getElementById('batch-input').value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) return;
+  batchData = lines.map((url, i) => {
+    const parsed = parseUrl(url);
+    if (!parsed.ok) return { idx: i+1, url, ok: false, probFail: null, verdict: 'Invalid', cls: 'warn' };
+    const r = predict(parsed, '', '');
+    const v = getVerdict(r.probFail, r.hasKnownDomain, currentThreshold);
+    return { idx: i+1, url, ok: true, parsed, probFail: r.probFail, passPct: (1-r.probFail)*100, verdict: v.label, cls: v.cls, domain: parsed.domain };
+  });
+  renderBatch();
+}
+
+function renderBatch() {
+  const out = document.getElementById('batch-output');
+  if (!batchData.length) { out.innerHTML = ''; return; }
+  const summary = { total: batchData.length, pass: 0, fail: 0, warn: 0 };
+  batchData.forEach(r => {
+    if (r.cls === 'pass') summary.pass++;
+    else if (r.cls === 'fail') summary.fail++;
+    else summary.warn++;
+  });
+
+  let view = batchData.slice();
+  if (batchFilter !== 'all') view = view.filter(r => r.cls === batchFilter);
+
+  const dirMult = batchSort.dir === 'asc' ? 1 : -1;
+  view.sort((a, b) => {
+    let av = a[batchSort.col], bv = b[batchSort.col];
+    if (av == null) av = ''; if (bv == null) bv = '';
+    if (av < bv) return -1 * dirMult;
+    if (av > bv) return 1 * dirMult;
+    return 0;
+  });
+
+  out.innerHTML = `
+    <div class="batch-results">
+      <div class="batch-summary">
+        <div class="summary-card"><div class="summary-label">Total</div><div class="summary-val">${summary.total}</div></div>
+        <div class="summary-card"><div class="summary-label">Likely Pass</div><div class="summary-val pass">${summary.pass}</div></div>
+        <div class="summary-card"><div class="summary-label">Likely Fail</div><div class="summary-val fail">${summary.fail}</div></div>
+        <div class="summary-card"><div class="summary-label">Borderline / Unknown</div><div class="summary-val warn">${summary.warn}</div></div>
+      </div>
+
+      <div class="filter-bar">
+        <span class="field-label">Filter:</span>
+        <span class="filter-chip ${batchFilter==='all'?'active':''}" data-f="all">All (${summary.total})</span>
+        <span class="filter-chip ${batchFilter==='pass'?'active':''}" data-f="pass">Pass (${summary.pass})</span>
+        <span class="filter-chip ${batchFilter==='fail'?'active':''}" data-f="fail">Fail (${summary.fail})</span>
+        <span class="filter-chip ${batchFilter==='warn'?'active':''}" data-f="warn">Borderline (${summary.warn})</span>
+        <button class="btn-ghost" id="batch-export" style="margin-left: auto;">Export CSV</button>
+      </div>
+
+      <table class="batch-table">
+        <thead>
+          <tr>
+            <th data-col="idx">#</th>
+            <th data-col="domain">Domain</th>
+            <th data-col="url">URL</th>
+            <th data-col="passPct" style="text-align:right;">Pass %</th>
+            <th data-col="verdict" style="text-align:right;">Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${view.map(r => `
+            <tr>
+              <td>${r.idx}</td>
+              <td>${escapeHtml(r.domain || '—')}</td>
+              <td class="url-cell" title="${escapeHtml(r.url)}">${escapeHtml(r.url)}</td>
+              <td style="text-align:right;">${r.ok ? r.passPct.toFixed(1) + '%' : '—'}</td>
+              <td style="text-align:right;"><span class="row-verdict ${r.cls}">${r.verdict}</span></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  out.querySelectorAll('.filter-chip').forEach(c => c.onclick = () => { batchFilter = c.dataset.f; renderBatch(); });
+  out.querySelectorAll('th[data-col]').forEach(th => th.onclick = () => {
+    const col = th.dataset.col;
+    if (batchSort.col === col) batchSort.dir = batchSort.dir === 'asc' ? 'desc' : 'asc';
+    else { batchSort.col = col; batchSort.dir = 'asc'; }
+    renderBatch();
+  });
+  document.getElementById('batch-export').onclick = exportBatchCsv;
+}
+
+function exportBatchCsv() {
+  const header = ['idx','url','domain','probFail','passPct','verdict'];
+  const rows = batchData.map(r => [r.idx, '"'+r.url.replace(/"/g,'""')+'"', r.domain || '', r.probFail != null ? r.probFail.toFixed(4) : '', r.ok ? r.passPct.toFixed(2) : '', r.verdict]);
+  const csv = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `autoqc_batch_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`;
+  a.click();
+}
+
+/* ============ HISTORY ============ */
+function saveHistory(item) {
+  let h = [];
+  try { h = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch {}
+  h.unshift(item);
+  h = h.slice(0, MAX_HISTORY);
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch {}
+}
+
+function renderHistory() {
+  let h = [];
+  try { h = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch {}
+  const wrap = document.getElementById('history-list');
+  if (!h.length) {
+    wrap.innerHTML = '<div class="empty-result" style="background:var(--bg-elev); border:1px solid var(--border); border-radius:12px;">No predictions yet. Run some on the Single or Batch tab.</div>';
+    return;
+  }
+  wrap.innerHTML = h.map(item => {
+    const passPct = (1 - item.probFail) * 100;
+    const v = getVerdict(item.probFail, item.hasKnown, currentThreshold);
+    const when = relTime(item.t);
+    return `<div class="history-item" data-url="${escapeHtml(item.url)}">
+      <span class="history-when">${when}</span>
+      <span class="history-url">${escapeHtml(item.url)}</span>
+      <span class="history-pct ${v.cls}" style="color: var(--${v.cls === 'pass' ? 'pass' : v.cls === 'fail' ? 'fail' : 'warn'})">${passPct.toFixed(1)}%</span>
+      <span class="history-verdict ${v.cls}" style="color: var(--${v.cls === 'pass' ? 'pass' : v.cls === 'fail' ? 'fail' : 'warn'})">${v.label}</span>
+    </div>`;
+  }).join('');
+  wrap.querySelectorAll('.history-item').forEach(el => el.onclick = () => {
+    const url = el.dataset.url;
+    document.getElementById('qc-url').value = url;
+    activateTab('single');
+    runSingle();
+  });
+}
+
+function relTime(t) {
+  const diff = (Date.now() - t) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+/* ============ TABS ============ */
+function activateTab(name) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+  if (name === 'history') renderHistory();
+}
+
+/* ============ INIT ============ */
 function init() {
   // Populate selects
   const catSel = document.getElementById('qc-category');
@@ -250,40 +857,58 @@ function init() {
     const o = document.createElement('option'); o.value = k; o.textContent = k; catSel.appendChild(o);
   });
   const entSel = document.getElementById('qc-enterprise');
-  // Show enterprises by sample count desc, top 100
   const ents = Object.keys(MODEL.enterprise).map(k => [k, MODEL.enterprise_counts[k] || 0]);
-  ents.sort((a,b) => b[1] - a[1]);
-  ents.slice(0, 200).forEach(([k, n]) => {
-    const o = document.createElement('option'); o.value = k; o.textContent = k + ' (n=' + n.toLocaleString() + ')'; entSel.appendChild(o);
+  ents.sort((a, b) => b[1] - a[1]);
+  ents.slice(0, 250).forEach(([k, n]) => {
+    const o = document.createElement('option'); o.value = k; o.textContent = `${k} (n=${n.toLocaleString()})`; entSel.appendChild(o);
   });
 
-  // Samples
-  const sEl = document.getElementById('qc-samples');
-  SAMPLES.forEach(s => {
-    const b = document.createElement('span');
-    b.className = 'qc-sample';
-    b.textContent = s.label;
-    b.onclick = () => { document.getElementById('qc-url').value = s.url; qcPredict(); };
-    sEl.appendChild(b);
+  // Sidebar stats
+  document.getElementById('side-records').textContent = MODEL.total_records.toLocaleString();
+  document.getElementById('side-pass').textContent = MODEL.pass_count.toLocaleString();
+  document.getElementById('side-fail').textContent = MODEL.fail_count.toLocaleString();
+  document.getElementById('side-base').textContent = (MODEL.base_rate * 100).toFixed(2) + '%';
+  document.getElementById('about-records').textContent = MODEL.total_records.toLocaleString();
+  document.getElementById('about-pass').textContent = MODEL.pass_count.toLocaleString();
+  document.getElementById('about-fail').textContent = MODEL.fail_count.toLocaleString();
+
+  // Tab nav
+  document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => activateTab(b.dataset.tab));
+
+  // Single
+  document.getElementById('qc-predict-btn').onclick = runSingle;
+  document.getElementById('qc-url').addEventListener('keydown', e => { if (e.key === 'Enter') runSingle(); });
+  document.querySelectorAll('.chip[data-sample]').forEach(c => c.onclick = () => {
+    const t = c.dataset.sample;
+    if (t === 'clear') {
+      document.getElementById('qc-url').value = '';
+      document.getElementById('qc-result-wrap').innerHTML = '';
+      return;
+    }
+    document.getElementById('qc-url').value = SAMPLES[t];
+    runSingle();
   });
 
-  // Model meta
-  document.getElementById('qc-model-meta').textContent =
-    'Trained on ' + MODEL.total_records.toLocaleString() + ' images · base fail rate ' + (MODEL.base_rate*100).toFixed(2) + '%';
+  // Batch
+  document.getElementById('batch-run').onclick = runBatch;
+  document.getElementById('batch-paste-sample').onclick = () => {
+    document.getElementById('batch-input').value = BATCH_SAMPLES.join('\n');
+  };
+  document.getElementById('batch-clear').onclick = () => {
+    document.getElementById('batch-input').value = '';
+    document.getElementById('batch-output').innerHTML = '';
+    batchData = [];
+  };
 
-  // Footer
-  document.getElementById('qc-foot').innerHTML =
-    'Predictions are based on historical pass/fail patterns by URL domain, path segments, ' +
-    'filename patterns, and (optional) category/enterprise. ' +
-    'Held-out validation: <strong style="font-weight:500;">AUC 0.994</strong>; ' +
-    'at threshold 5% the model catches 90% of fails with 60% precision. ' +
-    'URLs whose domain or enterprise are not in the historical data fall back to the base rate ' +
-    'and are marked Unknown.';
-
-  // Allow enter-key submit
-  document.getElementById('qc-url').addEventListener('keydown', e => {
-    if (e.key === 'Enter') qcPredict();
-  });
+  // History clear
+  document.getElementById('history-clear').onclick = () => {
+    if (confirm('Clear all history?')) {
+      localStorage.removeItem(HISTORY_KEY);
+      renderHistory();
+    }
+  };
 }
 init();
 </script>
+</body>
+</html>
